@@ -1,0 +1,23 @@
+# Binarios
+dist/
+*.exe
+
+# Datos generados en tiempo de ejecución
+data/
+
+# Entorno
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (futuro frontend)
+node_modules/
