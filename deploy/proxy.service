@@ -1,0 +1,16 @@
+[Unit]
+Description=Proxy Red Hospitalaria Distribuida
+Documentation=https://github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/proxy -http-port=8080
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
