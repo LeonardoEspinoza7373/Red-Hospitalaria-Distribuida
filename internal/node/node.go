@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -62,6 +64,7 @@ type Node struct {
 
 	httpServer     *http.Server
 	httpAddr       string // empty = do not start HTTP server
+	frontendDir    string // path to built SPA (frontend/dist)
 
 	UserStore    *data.UserStore
 	SessionStore *auth.SessionStore
@@ -109,6 +112,10 @@ func NewWithPortAndPeers(ip, port string, peers map[int]string) *Node {
 
 func (n *Node) SetHTTPAddr(addr string) {
 	n.httpAddr = addr
+}
+
+func (n *Node) SetFrontendDir(dir string) {
+	n.frontendDir = dir
 }
 
 func (n *Node) Start() {
@@ -301,8 +308,9 @@ func (n *Node) stopHTTPServer() {
 }
 
 func (n *Node) frontendHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = fmt.Fprintf(w, `<html>
+	if n.frontendDir == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprintf(w, `<html>
 <head><title>Red Hospitalaria Distribuida</title></head>
 <body>
 <h1>Red Hospitalaria Distribuida</h1>
@@ -310,4 +318,14 @@ func (n *Node) frontendHandler(w http.ResponseWriter, r *http.Request) {
 <p>IP: %s</p>
 </body>
 </html>`, n.ID, n.IP)
+		return
+	}
+
+	path := filepath.Join(n.frontendDir, r.URL.Path)
+	fi, err := os.Stat(path)
+	if err != nil || fi.IsDir() {
+		http.ServeFile(w, r, filepath.Join(n.frontendDir, "index.html"))
+		return
+	}
+	http.ServeFile(w, r, path)
 }

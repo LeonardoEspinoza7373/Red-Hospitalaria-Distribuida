@@ -60,6 +60,7 @@ func main() {
 	}
 
 	n.SetHTTPAddr(":" + config.FrontendPort)
+	n.SetFrontendDir("./frontend/dist")
 
 	dataDir := filepath.Join(".", "data", fmt.Sprintf("%d", n.ID))
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
