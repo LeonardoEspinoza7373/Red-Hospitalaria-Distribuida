@@ -15,21 +15,21 @@ import (
 )
 
 type Proxy struct {
-	mu               sync.Mutex
-	coordinatorID    int
-	coordinatorAddr  string
-	lastHeartbeat    time.Time
+	mu              sync.Mutex
+	coordinatorID   int
+	coordinatorAddr string
+	lastHeartbeat   time.Time
 
-	tcpAddr     string
-	httpAddr    string
-	server      *transport.Server
-	httpServer  *http.Server
-	rp          *httputil.ReverseProxy
-	ctx         context.Context
-	cancel      context.CancelFunc
-	log         *slog.Logger
+	tcpAddr    string
+	httpAddr   string
+	server     *transport.Server
+	httpServer *http.Server
+	rp         *httputil.ReverseProxy
+	ctx        context.Context
+	cancel     context.CancelFunc
+	log        *slog.Logger
 
-	nodeAddrs   map[int]string
+	nodeAddrs map[int]string
 }
 
 func New(httpPort string) *Proxy {
