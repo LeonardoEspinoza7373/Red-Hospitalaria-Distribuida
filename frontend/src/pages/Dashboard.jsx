@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 
 const hospitals = {
@@ -12,16 +13,9 @@ const roles = {
   doctor: 'Médico',
 }
 
-const cards = [
-  { title: 'Pacientes', icon: '👤', desc: 'Registro de pacientes en lista de espera' },
-  { title: 'Donantes', icon: '❤️', desc: 'Gestión de donantes voluntarios' },
-  { title: 'Órganos', icon: '🫀', desc: 'Inventario de órganos disponibles' },
-  { title: 'Donaciones', icon: '📋', desc: 'Registro de extracciones y donaciones' },
-  { title: 'Trasplantes', icon: '🔄', desc: 'Asignación y seguimiento de trasplantes' },
-]
-
 export function Dashboard() {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
 
   return (
     <div className="dashboard">
@@ -37,18 +31,36 @@ export function Dashboard() {
       <main>
         <h2>Panel de Control</h2>
         <div className="cards">
-          {cards.map(c => (
-            <div key={c.title} className="card">
-              <span className="card-icon">{c.icon}</span>
-              <h3>{c.title}</h3>
-              <p>{c.desc}</p>
-            </div>
-          ))}
+          <div className="card" onClick={() => navigate('/pacientes')}>
+            <span className="card-icon">👤</span>
+            <h3>Pacientes</h3>
+            <p>Registro de pacientes en lista de espera</p>
+          </div>
+          <div className="card" onClick={() => navigate('/donantes')}>
+            <span className="card-icon">❤️</span>
+            <h3>Donantes</h3>
+            <p>Gestión de donantes voluntarios</p>
+          </div>
+          <div className="card" onClick={() => navigate('/organos')}>
+            <span className="card-icon">🫀</span>
+            <h3>Órganos</h3>
+            <p>Inventario de órganos disponibles</p>
+          </div>
+          <div className="card" onClick={() => navigate('/donaciones')}>
+            <span className="card-icon">📋</span>
+            <h3>Donaciones</h3>
+            <p>Registro de extracciones</p>
+          </div>
+          <div className="card" onClick={() => navigate('/trasplantes')}>
+            <span className="card-icon">🔄</span>
+            <h3>Trasplantes</h3>
+            <p>Asignación y seguimiento</p>
+          </div>
           {user.role === 'admin' && (
-            <div className="card admin">
+            <div className="card admin" onClick={() => navigate('/usuarios')}>
               <span className="card-icon">⚙️</span>
               <h3>Administración</h3>
-              <p>Gestión de usuarios y monitoreo del sistema</p>
+              <p>Usuarios y monitoreo</p>
             </div>
           )}
         </div>

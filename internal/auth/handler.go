@@ -32,7 +32,7 @@ type errorResponse struct {
 
 type contextKey string
 
-const sessionKey contextKey = "session"
+const SessionKey contextKey = "session"
 
 func LoginHandler(store *data.UserStore, sessions *SessionStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +90,7 @@ func LogoutHandler(sessions *SessionStore) http.HandlerFunc {
 
 func MeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		session, ok := r.Context().Value(sessionKey).(*Session)
+		session, ok := r.Context().Value(SessionKey).(*Session)
 		if !ok {
 			writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "unauthorized"})
 			return
@@ -103,6 +103,21 @@ func MeHandler() http.HandlerFunc {
 			HospitalID:  session.HospitalID,
 		})
 	}
+}
+
+func AdminMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, ok := r.Context().Value(SessionKey).(*Session)
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "unauthorized"})
+			return
+		}
+		if session.Role != "admin" {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "forbidden: admin only"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func AuthMiddleware(sessions *SessionStore) func(http.Handler) http.Handler {
@@ -118,7 +133,7 @@ func AuthMiddleware(sessions *SessionStore) func(http.Handler) http.Handler {
 				writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "unauthorized"})
 				return
 			}
-			ctx := context.WithValue(r.Context(), sessionKey, session)
+			ctx := context.WithValue(r.Context(), SessionKey, session)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

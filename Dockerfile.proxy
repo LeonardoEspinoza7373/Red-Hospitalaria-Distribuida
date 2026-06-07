@@ -1,0 +1,14 @@
+FROM golang:1.22.5-alpine AS go-build
+WORKDIR /app
+COPY go.mod ./
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+COPY pkg/ ./pkg/
+RUN go build -ldflags="-s -w" -o /build/proxy ./cmd/proxy/
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=go-build /build/proxy .
+EXPOSE 5000 8080
+CMD ["./proxy", "-http-port=8080"]

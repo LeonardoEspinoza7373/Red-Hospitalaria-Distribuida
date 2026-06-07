@@ -97,6 +97,34 @@ func main() {
 		slog.Info("default admin user created (admin / admin)")
 	}
 
+	pacienteStore := data.NewGenericStore[*data.Paciente](filepath.Join(dataDir, "pacientes.json"))
+	if err := pacienteStore.Load(); err != nil {
+		slog.Error("failed to load pacientes", "error", err)
+		os.Exit(1)
+	}
+	n.PacienteStore = pacienteStore
+
+	donanteStore := data.NewGenericStore[*data.Donante](filepath.Join(dataDir, "donantes.json"))
+	if err := donanteStore.Load(); err != nil {
+		slog.Error("failed to load donantes", "error", err)
+		os.Exit(1)
+	}
+	n.DonanteStore = donanteStore
+
+	organoStore := data.NewGenericStore[*data.Organo](filepath.Join(dataDir, "organos.json"))
+	if err := organoStore.Load(); err != nil {
+		slog.Error("failed to load organos", "error", err)
+		os.Exit(1)
+	}
+	n.OrganoStore = organoStore
+
+	trasplanteStore := data.NewGenericStore[*data.Trasplante](filepath.Join(dataDir, "trasplantes.json"))
+	if err := trasplanteStore.Load(); err != nil {
+		slog.Error("failed to load trasplantes", "error", err)
+		os.Exit(1)
+	}
+	n.TrasplanteStore = trasplanteStore
+
 	n.Start()
 
 	slog.Info("nodo listo", "node_id", n.ID, "ip", ip)

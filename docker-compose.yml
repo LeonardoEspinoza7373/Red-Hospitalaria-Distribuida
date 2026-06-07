@@ -1,0 +1,79 @@
+services:
+  nodo1:
+    build:
+      context: .
+      dockerfile: Dockerfile.nodo
+    container_name: nodo1
+    hostname: nodo1
+    networks:
+      cluster-net:
+        ipv4_address: 192.168.1.13
+    volumes:
+      - data_nodo1:/app/data
+    restart: unless-stopped
+
+  nodo2:
+    build:
+      context: .
+      dockerfile: Dockerfile.nodo
+    container_name: nodo2
+    hostname: nodo2
+    networks:
+      cluster-net:
+        ipv4_address: 192.168.1.12
+    volumes:
+      - data_nodo2:/app/data
+    restart: unless-stopped
+
+  nodo3:
+    build:
+      context: .
+      dockerfile: Dockerfile.nodo
+    container_name: nodo3
+    hostname: nodo3
+    networks:
+      cluster-net:
+        ipv4_address: 192.168.1.11
+    volumes:
+      - data_nodo3:/app/data
+    restart: unless-stopped
+
+  nodo4:
+    build:
+      context: .
+      dockerfile: Dockerfile.nodo
+    container_name: nodo4
+    hostname: nodo4
+    networks:
+      cluster-net:
+        ipv4_address: 192.168.1.10
+    volumes:
+      - data_nodo4:/app/data
+    restart: unless-stopped
+
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    container_name: proxy
+    hostname: proxy
+    networks:
+      cluster-net:
+        ipv4_address: 192.168.1.14
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+networks:
+  cluster-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+          gateway: 192.168.1.1
+
+volumes:
+  data_nodo1:
+  data_nodo2:
+  data_nodo3:
+  data_nodo4:

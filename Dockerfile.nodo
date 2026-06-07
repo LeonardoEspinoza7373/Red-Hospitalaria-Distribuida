@@ -1,0 +1,23 @@
+FROM golang:1.22.5-alpine AS go-build
+WORKDIR /app
+COPY go.mod ./
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+COPY pkg/ ./pkg/
+RUN go build -ldflags="-s -w" -o /build/nodo ./cmd/nodo/
+
+FROM node:20-alpine AS frontend-build
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=go-build /build/nodo .
+COPY --from=frontend-build /app/dist ./frontend/dist
+RUN mkdir -p /app/data
+EXPOSE 5000 8080
+CMD ["./nodo"]

@@ -120,7 +120,7 @@ func TestAuthMiddleware(t *testing.T) {
 	called := false
 	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		s := r.Context().Value(sessionKey).(*Session)
+		s := r.Context().Value(SessionKey).(*Session)
 		if s.Username != "admin" {
 			t.Fatal("expected admin in context")
 		}

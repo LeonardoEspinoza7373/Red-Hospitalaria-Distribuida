@@ -1,0 +1,11 @@
+dist/
+frontend/node_modules/
+frontend/dist/
+data/
+deploy/
+.git/
+.gitignore
+README.md
+*.md
+build.sh
+deploy.sh

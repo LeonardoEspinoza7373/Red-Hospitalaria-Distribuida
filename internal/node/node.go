@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/api"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/auth"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/data"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/protocol"
@@ -66,8 +67,12 @@ type Node struct {
 	httpAddr       string // empty = do not start HTTP server
 	frontendDir    string // path to built SPA (frontend/dist)
 
-	UserStore    *data.UserStore
-	SessionStore *auth.SessionStore
+	UserStore       *data.UserStore
+	SessionStore    *auth.SessionStore
+	PacienteStore   *data.GenericStore[*data.Paciente]
+	DonanteStore    *data.GenericStore[*data.Donante]
+	OrganoStore     *data.GenericStore[*data.Organo]
+	TrasplanteStore *data.GenericStore[*data.Trasplante]
 }
 
 func New(ip string) *Node {
@@ -270,6 +275,52 @@ func (n *Node) startHTTPServer() {
 		mux.HandleFunc("/api/logout", auth.LogoutHandler(n.SessionStore))
 		protected := auth.AuthMiddleware(n.SessionStore)
 		mux.Handle("/api/me", protected(http.HandlerFunc(auth.MeHandler())))
+
+		if n.PacienteStore != nil {
+			pacienteAPI := &api.EntityAPI[*data.Paciente]{Store: n.PacienteStore}
+			mux.Handle("GET /api/pacientes", protected(http.HandlerFunc(pacienteAPI.List)))
+			mux.Handle("GET /api/pacientes/{id}", protected(http.HandlerFunc(pacienteAPI.Get)))
+			mux.Handle("POST /api/pacientes", protected(http.HandlerFunc(pacienteAPI.Create)))
+			mux.Handle("PUT /api/pacientes/{id}", protected(http.HandlerFunc(pacienteAPI.Update)))
+			mux.Handle("DELETE /api/pacientes/{id}", protected(http.HandlerFunc(pacienteAPI.Delete)))
+		}
+
+		if n.DonanteStore != nil {
+			donanteAPI := &api.EntityAPI[*data.Donante]{Store: n.DonanteStore}
+			mux.Handle("GET /api/donantes", protected(http.HandlerFunc(donanteAPI.List)))
+			mux.Handle("GET /api/donantes/{id}", protected(http.HandlerFunc(donanteAPI.Get)))
+			mux.Handle("POST /api/donantes", protected(http.HandlerFunc(donanteAPI.Create)))
+			mux.Handle("PUT /api/donantes/{id}", protected(http.HandlerFunc(donanteAPI.Update)))
+			mux.Handle("DELETE /api/donantes/{id}", protected(http.HandlerFunc(donanteAPI.Delete)))
+		}
+
+		if n.OrganoStore != nil {
+			organoAPI := &api.EntityAPI[*data.Organo]{Store: n.OrganoStore}
+			mux.Handle("GET /api/organos", protected(http.HandlerFunc(organoAPI.List)))
+			mux.Handle("GET /api/organos/{id}", protected(http.HandlerFunc(organoAPI.Get)))
+			mux.Handle("POST /api/organos", protected(http.HandlerFunc(organoAPI.Create)))
+			mux.Handle("PUT /api/organos/{id}", protected(http.HandlerFunc(organoAPI.Update)))
+			mux.Handle("DELETE /api/organos/{id}", protected(http.HandlerFunc(organoAPI.Delete)))
+		}
+
+		if n.UserStore != nil {
+			userAPI := &api.UserAPI{Store: n.UserStore}
+			adminProtected := adminMiddleware(protected)
+			mux.Handle("GET /api/usuarios", adminProtected(http.HandlerFunc(userAPI.List)))
+			mux.Handle("GET /api/usuarios/{id}", adminProtected(http.HandlerFunc(userAPI.Get)))
+			mux.Handle("POST /api/usuarios", adminProtected(http.HandlerFunc(userAPI.Create)))
+			mux.Handle("PUT /api/usuarios/{id}", adminProtected(http.HandlerFunc(userAPI.Update)))
+			mux.Handle("DELETE /api/usuarios/{id}", adminProtected(http.HandlerFunc(userAPI.Delete)))
+		}
+
+		if n.TrasplanteStore != nil {
+			trasplanteAPI := &api.EntityAPI[*data.Trasplante]{Store: n.TrasplanteStore}
+			mux.Handle("GET /api/trasplantes", protected(http.HandlerFunc(trasplanteAPI.List)))
+			mux.Handle("GET /api/trasplantes/{id}", protected(http.HandlerFunc(trasplanteAPI.Get)))
+			mux.Handle("POST /api/trasplantes", protected(http.HandlerFunc(trasplanteAPI.Create)))
+			mux.Handle("PUT /api/trasplantes/{id}", protected(http.HandlerFunc(trasplanteAPI.Update)))
+			mux.Handle("DELETE /api/trasplantes/{id}", protected(http.HandlerFunc(trasplanteAPI.Delete)))
+		}
 	}
 
 	mux.HandleFunc("/", n.frontendHandler)
@@ -304,6 +355,12 @@ func (n *Node) stopHTTPServer() {
 		if err := server.Shutdown(ctx); err != nil {
 			n.log.Warn("frontend HTTP server shutdown error", "error", err)
 		}
+	}
+}
+
+func adminMiddleware(authMW func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return authMW(auth.AdminMiddleware(next))
 	}
 }
 
