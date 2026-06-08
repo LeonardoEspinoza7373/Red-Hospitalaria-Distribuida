@@ -32,11 +32,11 @@ type Proxy struct {
 	nodeAddrs map[int]string
 }
 
-func New(httpPort string) *Proxy {
-	return NewWithPorts(config.Port, httpPort)
+func New(httpAddr string) *Proxy {
+	return NewWithPorts(config.Port, httpAddr)
 }
 
-func NewWithPorts(tcpPort, httpPort string) *Proxy {
+func NewWithPorts(tcpPort, httpAddr string) *Proxy {
 	nodeAddrs := make(map[int]string)
 	for id, ip := range config.IDToIP {
 		nodeAddrs[id] = net.JoinHostPort(ip, config.FrontendPort)
@@ -44,9 +44,14 @@ func NewWithPorts(tcpPort, httpPort string) *Proxy {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// If httpAddr is just a port number (no colon), prefix with ":"
+	if httpAddr != "" && httpAddr[0] != ':' && httpAddr[0] != '@' {
+		httpAddr = ":" + httpAddr
+	}
+
 	p := &Proxy{
 		tcpAddr:   ":" + tcpPort,
-		httpAddr:  ":" + httpPort,
+		httpAddr:  httpAddr,
 		ctx:       ctx,
 		cancel:    cancel,
 		log:       slog.With("component", "proxy"),

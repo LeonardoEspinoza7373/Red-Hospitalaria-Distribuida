@@ -6,7 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/proxy -http-port=8080
+ExecStart=/usr/local/bin/proxy -listen=:80
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
