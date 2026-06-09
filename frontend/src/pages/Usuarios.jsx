@@ -10,9 +10,10 @@ const columns = [
 ]
 
 const Form = [
-  { key: 'username', label: 'Usuario', required: true },
-  { key: 'password', label: 'Contraseña', required: false, placeholder: 'Solo si desea cambiarla' },
-  { key: 'display_name', label: 'Nombre Completo', required: true },
+  { key: 'username', label: 'Nombre de Usuario', required: true, placeholder: 'Ingrese el nombre de usuario (login)' },
+  { key: 'password', label: 'Contraseña', type: 'password', required: false, placeholder: 'Solo si desea cambiarla' },
+  { key: 'password_confirm', label: 'Confirmar Contraseña', type: 'password', required: false, placeholder: 'Repita la contraseña' },
+  { key: 'display_name', label: 'Nombre Visible', required: true, placeholder: 'Ingrese el nombre visible del usuario' },
   { key: 'role', label: 'Rol', type: 'select', required: true,
     options: [
       { value: 'admin', label: 'Administrador' },

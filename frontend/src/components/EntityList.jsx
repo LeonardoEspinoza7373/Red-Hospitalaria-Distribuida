@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { BackButton } from './BackButton'
 
 export function EntityList({ api, columns, title, Form }) {
   const [items, setItems] = useState([])
@@ -39,15 +40,19 @@ export function EntityList({ api, columns, title, Form }) {
       fields={Form}
       initial={form}
       onSave={handleSave}
-      onCancel={() => setForm(null)}
+      onCancel={() => { setForm(null); setError('') }}
+      error={error}
     />
   )
 
   return (
     <div className="entity-page">
       <header className="entity-header">
-        <h2>{title}</h2>
-        <button className="btn-primary" onClick={() => setForm({})}>+ Nuevo</button>
+        <div className="entity-header-left">
+          <BackButton />
+          <h2>{title}</h2>
+        </div>
+        <button className="btn-primary" onClick={() => { setForm({}); setError('') }}>+ Nuevo</button>
       </header>
       {error && <div className="error">{error}</div>}
       {loading ? <div className="loading">Cargando...</div> : (
@@ -78,22 +83,44 @@ export function EntityList({ api, columns, title, Form }) {
   )
 }
 
-function EntityForm({ title, fields, initial, onSave, onCancel }) {
+function EntityForm({ title, fields, initial, onSave, onCancel, error: serverError }) {
   const [data, setData] = useState({ ...initial })
   const [busy, setBusy] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [showPw, setShowPw] = useState({})
 
   const handleChange = (key, value) => setData(prev => ({ ...prev, [key]: value }))
 
   const handleSubmit = async e => {
     e.preventDefault()
+    setFormError('')
+
+    const hasPwConfirm = fields.some(f => f.key === 'password_confirm')
+    if (hasPwConfirm && data.password && data.password !== data.password_confirm) {
+      setFormError('Las contraseñas no coinciden')
+      return
+    }
+
+    const payload = { ...data }
+    delete payload.password_confirm
+    for (const key of Object.keys(payload)) {
+      const field = fields.find(f => f.key === key)
+      if (field?.type === 'select' && typeof payload[key] === 'string') {
+        const num = Number(payload[key])
+        if (!isNaN(num)) payload[key] = num
+      }
+    }
     setBusy(true)
-    await onSave(data)
+    await onSave(payload)
     setBusy(false)
   }
+
+  const displayError = formError || serverError
 
   return (
     <div className="entity-form-page">
       <h2>{title}</h2>
+      {displayError && <div className="error">{displayError}</div>}
       <form className="entity-form" onSubmit={handleSubmit}>
         {fields.map(f => (
           <label key={f.key}>
@@ -105,6 +132,19 @@ function EntityForm({ title, fields, initial, onSave, onCancel }) {
               </select>
             ) : f.type === 'number' ? (
               <input type="number" value={data[f.key] || ''} onChange={e => handleChange(f.key, +e.target.value)} required={f.required} />
+            ) : f.type === 'password' ? (
+              <div className="password-wrapper">
+                <input
+                  type={showPw[f.key] ? 'text' : 'password'}
+                  value={data[f.key] || ''}
+                  onChange={e => handleChange(f.key, e.target.value)}
+                  required={f.required}
+                  placeholder={initial.id ? f.placeholder : ''}
+                />
+                <button type="button" className="btn-toggle-pw" onClick={() => setShowPw(prev => ({ ...prev, [f.key]: !prev[f.key] }))} tabIndex={-1}>
+                  {showPw[f.key] ? '🙈' : '👁️'}
+                </button>
+              </div>
             ) : (
               <input type="text" value={data[f.key] || ''} onChange={e => handleChange(f.key, e.target.value)} required={f.required} placeholder={f.placeholder} />
             )}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { BackButton } from '../components/BackButton'
 import { organosAPI, donantesAPI } from '../api'
 
 const tiposOrgano = [
@@ -49,7 +50,12 @@ export function Donaciones() {
 
   if (form) return (
     <div className="entity-form-page">
-      <h2>Registrar Extracción</h2>
+      <div className="entity-header">
+        <div className="entity-header-left">
+          <BackButton />
+          <h2>Registrar Extracción</h2>
+        </div>
+      </div>
       <form className="entity-form" onSubmit={handleExtract}>
         <label>
           <span>Donante</span>
@@ -80,7 +86,10 @@ export function Donaciones() {
   return (
     <div className="entity-page">
       <header className="entity-header">
-        <h2>Donaciones (Extracciones)</h2>
+        <div className="entity-header-left">
+          <BackButton />
+          <h2>Donaciones (Extracciones)</h2>
+        </div>
         <button className="btn-primary" onClick={() => setForm(true)}>+ Nueva Extracción</button>
       </header>
       {error && <div className="error">{error}</div>}

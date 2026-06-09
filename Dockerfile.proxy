@@ -11,4 +11,4 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=go-build /build/proxy .
 EXPOSE 5000 8080
-CMD ["./proxy", "-http-port=8080"]
+CMD ["./proxy", "-listen=:8080"]
