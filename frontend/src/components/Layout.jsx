@@ -1,5 +1,6 @@
 import { useAuth } from '../AuthContext'
 import { Sidebar } from './Sidebar'
+import { IconHospital, IconUser } from '../icons'
 
 const hospitals = {
   1: 'Hospital Loja',
@@ -20,7 +21,7 @@ export function Layout({ children }) {
     <div className="layout">
       <header className="topbar">
         <div className="topbar-brand">
-          <span className="topbar-brand-dot" aria-hidden />
+          <IconHospital />
           <h1>Red Hospitalaria Distribuida</h1>
         </div>
         <div className="user-badge">
@@ -32,10 +33,7 @@ export function Layout({ children }) {
             </div>
           </div>
           <div className="user-avatar" aria-hidden>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="8" r="3" fill="rgba(212,120,106,0.6)" />
-              <path d="M4 20c1.5-4 6-6 8-6s6.5 2 8 6" stroke="rgba(212,120,106,0.4)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <IconUser />
           </div>
           <button className="btn-logout" onClick={logout} aria-label="Cerrar sesión">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>

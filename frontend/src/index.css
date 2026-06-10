@@ -12,8 +12,8 @@
   --color-gold: #c4a265;
   --color-success: #6abf9e;
   --color-danger: #d16060;
-  --font-display: 'DM Serif Display', Georgia, serif;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   --radius: 10px;
   --radius-sm: 6px;
@@ -153,14 +153,13 @@ body {
 .topbar-brand {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 
-.topbar-brand-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-life);
+.topbar-brand svg {
+  width: 22px;
+  height: 22px;
+  color: var(--color-life);
   flex-shrink: 0;
 }
 
@@ -245,8 +244,14 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(212,120,106,0.3), rgba(212,120,106,0.1));
-  border: 1px solid rgba(212,120,106,0.25);
+  background: linear-gradient(135deg, rgba(212,120,106,0.35), rgba(212,120,106,0.08));
+  border: 1px solid rgba(212,120,106,0.3);
+}
+
+.user-avatar svg {
+  width: 20px;
+  height: 20px;
+  color: var(--color-life);
 }
 
 .user-info { display: flex; flex-direction: column; gap: 0.1rem; }
