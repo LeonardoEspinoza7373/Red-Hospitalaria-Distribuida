@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { IconEye, IconEyeOff } from '../icons'
 
 export function EntityList({ api, columns, title, Form }) {
   const [items, setItems] = useState([])
@@ -201,7 +202,7 @@ function EntityForm({ title, fields, initial, onSave, onCancel, error: serverErr
                   placeholder={initial.id ? f.placeholder : ''}
                 />
                 <button type="button" className="btn-toggle-pw" onClick={() => setShowPw(prev => ({ ...prev, [f.key]: !prev[f.key] }))} tabIndex={-1}>
-                  {showPw[f.key] ? '🙈' : '👁️'}
+                  {showPw[f.key] ? <IconEyeOff /> : <IconEye />}
                 </button>
               </div>
             ) : (

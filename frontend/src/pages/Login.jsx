@@ -26,9 +26,9 @@ export function Login() {
   return (
     <div className="login-page">
       <form className="login-form" onSubmit={handleSubmit}>
+        <div className="brand-accent" />
         <h1>Red Hospitalaria Distribuida</h1>
-        <p className="subtitle">Sistema de Gestión de Donaciones</p>
-        <h2>Iniciar Sesión</h2>
+        <p className="subtitle">Sistema de Gestión de Donaciones y Trasplantes</p>
         {error && <div className="error">{error}</div>}
         <input
           type="text"

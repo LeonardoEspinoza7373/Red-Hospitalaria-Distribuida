@@ -110,7 +110,7 @@ export function Donaciones() {
                   <td>{donante?.nombre || org.donante_id}</td>
                   <td>{tiposOrgano.find(t => t.value === org.tipo)?.label || org.tipo}</td>
                   <td>{org.compatibilidad}</td>
-                  <td>{org.estado === 'DISPONIBLE' ? <span style={{color: '#4ade80'}}>Disponible</span> : <span style={{color: '#f87171'}}>No Disponible</span>}</td>
+                  <td>{org.estado === 'DISPONIBLE' ? <span className="status-available">Disponible</span> : <span className="status-unavailable">No Disponible</span>}</td>
                 </tr>
               )
             })}
