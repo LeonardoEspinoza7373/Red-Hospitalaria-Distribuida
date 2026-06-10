@@ -184,7 +184,14 @@ body {
   padding: 0.5rem 0;
   display: flex;
   flex-direction: column;
+}
+
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   gap: 0.1rem;
+  overflow-y: auto;
 }
 
 .sidebar-link {
@@ -213,6 +220,25 @@ body {
   background: rgba(212,120,106,0.08);
   color: var(--color-life);
   border-right-color: var(--color-life);
+}
+
+.sidebar-logout {
+  border-right-color: transparent;
+  color: var(--color-subtle);
+  font-size: 0.82rem;
+}
+
+.sidebar-logout:hover {
+  color: var(--color-danger);
+  background: rgba(209,96,96,0.06);
+}
+
+.sidebar-logout svg {
+  opacity: 0.6;
+}
+
+.sidebar-logout:hover svg {
+  opacity: 1;
 }
 
 .sidebar-link svg {

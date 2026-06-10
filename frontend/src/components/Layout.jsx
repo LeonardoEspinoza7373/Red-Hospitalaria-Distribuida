@@ -15,7 +15,7 @@ const roles = {
 }
 
 export function Layout({ children }) {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
 
   return (
     <div className="layout">
@@ -35,13 +35,6 @@ export function Layout({ children }) {
           <div className="user-avatar" aria-hidden>
             <IconUser />
           </div>
-          <button className="btn-logout" onClick={logout} aria-label="Cerrar sesión">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-              <path d="M16 17l5-5-5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M21 12H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="logout-text">Salir</span>
-          </button>
         </div>
       </header>
       <div className="layout-body">

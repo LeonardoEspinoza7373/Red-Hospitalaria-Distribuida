@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
-import { IconHome, IconUser, IconHeart, IconActivity, IconClipboard, IconSwap, IconSettings, IconTerminal } from '../icons'
+import { IconHome, IconUser, IconHeart, IconActivity, IconClipboard, IconSwap, IconSettings, IconTerminal, IconLogOut } from '../icons'
 
 const links = [
   { to: '/', icon: IconHome, label: 'Dashboard' },
@@ -17,7 +17,7 @@ const adminLinks = [
 ]
 
 export function Sidebar() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -28,37 +28,44 @@ export function Sidebar() {
 
   return (
     <nav className="sidebar">
-      {links.map(link => {
-        const Icon = link.icon
-        return (
-          <button
-            key={link.to}
-            className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
-            onClick={() => navigate(link.to)}
-          >
-            <Icon />
-            <span>{link.label}</span>
-          </button>
-        )
-      })}
-      {user.role === 'admin' && (
-        <>
-          <div className="sidebar-divider" />
-          {adminLinks.map(link => {
-            const Icon = link.icon
-            return (
-              <button
-                key={link.to}
-                className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
-                onClick={() => navigate(link.to)}
-              >
-                <Icon />
-                <span>{link.label}</span>
-              </button>
-            )
-          })}
-        </>
-      )}
+      <div className="sidebar-nav">
+        {links.map(link => {
+          const Icon = link.icon
+          return (
+            <button
+              key={link.to}
+              className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
+              onClick={() => navigate(link.to)}
+            >
+              <Icon />
+              <span>{link.label}</span>
+            </button>
+          )
+        })}
+        {user.role === 'admin' && (
+          <>
+            <div className="sidebar-divider" />
+            {adminLinks.map(link => {
+              const Icon = link.icon
+              return (
+                <button
+                  key={link.to}
+                  className={`sidebar-link${isActive(link.to) ? ' active' : ''}`}
+                  onClick={() => navigate(link.to)}
+                >
+                  <Icon />
+                  <span>{link.label}</span>
+                </button>
+              )
+            })}
+          </>
+        )}
+      </div>
+      <div className="sidebar-divider" />
+      <button className="sidebar-link sidebar-logout" onClick={logout}>
+        <IconLogOut />
+        <span>Salir</span>
+      </button>
     </nav>
   )
 }
