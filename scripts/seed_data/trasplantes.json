@@ -1,0 +1,66 @@
+[
+  {
+    "_ref_id": 401,
+    "paciente_id": 101,
+    "organo_id": 301,
+    "fecha": "2025-03-15",
+    "estado": "REALIZADO",
+    "hospital_id": 1
+  },
+  {
+    "_ref_id": 402,
+    "paciente_id": 102,
+    "organo_id": 302,
+    "fecha": "2025-04-20",
+    "estado": "EN_CURSO",
+    "hospital_id": 1
+  },
+  {
+    "_ref_id": 403,
+    "paciente_id": 105,
+    "organo_id": 305,
+    "fecha": "2025-05-10",
+    "estado": "REALIZADO",
+    "hospital_id": 2
+  },
+  {
+    "_ref_id": 404,
+    "paciente_id": 106,
+    "organo_id": 306,
+    "fecha": "2025-06-01",
+    "estado": "PENDIENTE",
+    "hospital_id": 2
+  },
+  {
+    "_ref_id": 405,
+    "paciente_id": 109,
+    "organo_id": 308,
+    "fecha": "2025-06-15",
+    "estado": "PENDIENTE",
+    "hospital_id": 3
+  },
+  {
+    "_ref_id": 406,
+    "paciente_id": 110,
+    "organo_id": 309,
+    "fecha": "2025-07-01",
+    "estado": "PENDIENTE",
+    "hospital_id": 3
+  },
+  {
+    "_ref_id": 407,
+    "paciente_id": 113,
+    "organo_id": 311,
+    "fecha": "2025-07-10",
+    "estado": "PENDIENTE",
+    "hospital_id": 4
+  },
+  {
+    "_ref_id": 408,
+    "paciente_id": 114,
+    "organo_id": 312,
+    "fecha": "2025-05-20",
+    "estado": "REALIZADO",
+    "hospital_id": 4
+  }
+]

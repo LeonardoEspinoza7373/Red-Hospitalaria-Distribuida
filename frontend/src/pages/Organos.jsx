@@ -1,12 +1,11 @@
 import { EntityList } from '../components/EntityList'
-import { organosAPI } from '../api'
+import { organosAPI, donantesAPI } from '../api'
 
 const columns = [
-  { key: 'id', label: 'ID' },
   { key: 'tipo', label: 'Tipo' },
   { key: 'compatibilidad', label: 'Compatibilidad' },
   { key: 'estado', label: 'Estado' },
-  { key: 'donante_id', label: 'Donante ID' },
+  { key: 'donante_id', label: 'Donante', resolve: { api: donantesAPI, displayKey: 'nombre' } },
 ]
 
 const Form = [
@@ -22,14 +21,16 @@ const Form = [
       { value: 'MEDULA_OSEA', label: 'Médula Ósea' },
     ],
   },
-  { key: 'compatibilidad', label: 'Compatibilidad', required: true, placeholder: 'Ej: O+, A-...' },
+  { key: 'compatibilidad', label: 'Compatibilidad', required: true, placeholder: 'Se asigna del donante', readOnly: true },
   { key: 'estado', label: 'Estado', type: 'select', required: true,
     options: [
       { value: 'DISPONIBLE', label: 'Disponible' },
       { value: 'NO_DISPONIBLE', label: 'No Disponible' },
     ],
   },
-  { key: 'donante_id', label: 'ID del Donante', type: 'number', required: true },
+  { key: 'donante_id', label: 'Donante', type: 'async-select', required: true,
+    api: donantesAPI, displayKey: 'nombre',
+    sync: { field: 'compatibilidad', source: 'tipo_sangre' } },
 ]
 
 export function Organos() {

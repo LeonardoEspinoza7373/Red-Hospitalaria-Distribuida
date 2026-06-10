@@ -1,12 +1,23 @@
 import { EntityList } from '../components/EntityList'
 import { usuariosAPI } from '../api'
 
+const roles = {
+  admin: 'Administrador',
+  doctor: 'Médico',
+}
+
+const hospitals = {
+  1: 'Hospital Loja',
+  2: 'Hospital Cuenca',
+  3: 'Hospital Quito',
+  4: 'Hospital Guayaquil',
+}
+
 const columns = [
-  { key: 'id', label: 'ID' },
   { key: 'username', label: 'Usuario' },
   { key: 'display_name', label: 'Nombre' },
-  { key: 'role', label: 'Rol' },
-  { key: 'hospital_id', label: 'Hospital ID' },
+  { key: 'role', label: 'Rol', resolve: { format: r => roles[r] } },
+  { key: 'hospital_id', label: 'Hospital', resolve: { format: id => hospitals[id] } },
 ]
 
 const Form = [

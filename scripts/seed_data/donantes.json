@@ -1,0 +1,98 @@
+[
+  {
+    "_ref_id": 201,
+    "nombre": "Juan Pablo Torres Ávila",
+    "tipo_sangre": "O+",
+    "edad": 35,
+    "detalle": "Donante fallecido por accidente cerebrovascular. Familiar autorizó donación multiorgánica.",
+    "hospital_id": 1
+  },
+  {
+    "_ref_id": 202,
+    "nombre": "Alicia del Rosario Vega Muñoz",
+    "tipo_sangre": "A+",
+    "edad": 28,
+    "detalle": "Donante vivo voluntario. Donación de riñón a familiar compatible.",
+    "hospital_id": 1
+  },
+  {
+    "_ref_id": 203,
+    "nombre": "Roberto Carlos Sánchez Guzmán",
+    "tipo_sangre": "B+",
+    "edad": 45,
+    "detalle": "Donante fallecido por trauma craneoencefálico. Donación de córneas y corazón.",
+    "hospital_id": 1
+  },
+  {
+    "_ref_id": 204,
+    "nombre": "Marcela Alejandra Campos Delgado",
+    "tipo_sangre": "O-",
+    "edad": 52,
+    "detalle": "Donante fallecido por aneurisma cerebral. Donante universal O-.",
+    "hospital_id": 2
+  },
+  {
+    "_ref_id": 205,
+    "nombre": "Luis Alberto Mendoza Salazar",
+    "tipo_sangre": "A+",
+    "edad": 30,
+    "detalle": "Donante vivo. Donación parcial de hígado para trasplante familiar.",
+    "hospital_id": 2
+  },
+  {
+    "_ref_id": 206,
+    "nombre": "Patricia del Carmen Rivas Contreras",
+    "tipo_sangre": "AB+",
+    "edad": 42,
+    "detalle": "Donante fallecido por paro cardíaco. Receptor universal AB+ dona páncreas.",
+    "hospital_id": 2
+  },
+  {
+    "_ref_id": 207,
+    "nombre": "Fernando Enrique Lagos Pereira",
+    "tipo_sangre": "O+",
+    "edad": 25,
+    "detalle": "Donante fallecido por accidente automovilístico. Donación múltiple de órganos.",
+    "hospital_id": 3
+  },
+  {
+    "_ref_id": 208,
+    "nombre": "Mónica Beatriz Herrera Cruz",
+    "tipo_sangre": "A-",
+    "edad": 38,
+    "detalle": "Donante vivo. Donación de médula ósea compatible con paciente.",
+    "hospital_id": 3
+  },
+  {
+    "_ref_id": 209,
+    "nombre": "Ricardo Antonio Paredes Zambrano",
+    "tipo_sangre": "B-",
+    "edad": 55,
+    "detalle": "Donante fallecido por hemorragia interna. Donación de córneas y tejidos.",
+    "hospital_id": 3
+  },
+  {
+    "_ref_id": 210,
+    "nombre": "Elena Sofía Quintero Lozano",
+    "tipo_sangre": "O-",
+    "edad": 29,
+    "detalle": "Donante fallecido por traumatismo múltiple. Donante universal O-.",
+    "hospital_id": 4
+  },
+  {
+    "_ref_id": 211,
+    "nombre": "Jorge Alberto Fuentes Medina",
+    "tipo_sangre": "A+",
+    "edad": 48,
+    "detalle": "Donante vivo. Donación de riñón por altruismo.",
+    "hospital_id": 4
+  },
+  {
+    "_ref_id": 212,
+    "nombre": "Daniela Fernanda Soto Espinoza",
+    "tipo_sangre": "AB-",
+    "edad": 33,
+    "detalle": "Donante fallecido por accidente de motocicleta. Donación de órganos autorizada.",
+    "hospital_id": 4
+  }
+]

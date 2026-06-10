@@ -8,11 +8,19 @@ import (
 
 type MessageType string
 
+type LogEntry struct {
+	NodeID    int    `json:"node_id"`
+	Level     string `json:"level"`
+	Message   string `json:"message"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 const (
 	Heartbeat   MessageType = "HEARTBEAT"
 	Election    MessageType = "ELECTION"
 	OK          MessageType = "OK"
 	Coordinator MessageType = "COORDINATOR"
+	LogEvent    MessageType = "LOG_EVENT"
 )
 
 type Message struct {
@@ -20,6 +28,7 @@ type Message struct {
 	NodeID        int         `json:"node_id"`
 	CoordinatorID int         `json:"coordinator_id,omitempty"`
 	Timestamp     int64       `json:"timestamp"`
+	LogData       *LogEntry   `json:"log_data,omitempty"`
 }
 
 func NewMessage(msgType MessageType, nodeID int) Message {

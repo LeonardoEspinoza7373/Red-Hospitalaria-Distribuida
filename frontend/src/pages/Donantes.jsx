@@ -2,7 +2,6 @@ import { EntityList } from '../components/EntityList'
 import { donantesAPI } from '../api'
 
 const columns = [
-  { key: 'id', label: 'ID' },
   { key: 'nombre', label: 'Nombre' },
   { key: 'tipo_sangre', label: 'Tipo Sangre' },
   { key: 'edad', label: 'Edad' },

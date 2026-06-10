@@ -44,7 +44,8 @@ func getLocalIP() string {
 }
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	baseHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+	slog.SetDefault(slog.New(baseHandler))
 
 	ip := getLocalIP()
 	if ip == "" {
@@ -54,6 +55,10 @@ func main() {
 	}
 
 	n := node.New(ip)
+
+	captureHandler := node.NewCaptureHandler(slog.Default().Handler(), n)
+	slog.SetDefault(slog.New(captureHandler))
+	n.SetLogger(slog.With("node_id", n.ID, "ip", n.IP))
 	if n == nil {
 		slog.Error("IP detectada no está en la configuración", "ip", ip)
 		os.Exit(1)

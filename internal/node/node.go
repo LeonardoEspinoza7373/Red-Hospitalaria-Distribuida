@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -73,6 +74,9 @@ type Node struct {
 	DonanteStore    *data.GenericStore[*data.Donante]
 	OrganoStore     *data.GenericStore[*data.Organo]
 	TrasplanteStore *data.GenericStore[*data.Trasplante]
+
+	logBuffer *LogBuffer
+	logQueue  chan protocol.LogEntry
 }
 
 func New(ip string) *Node {
@@ -112,7 +116,13 @@ func NewWithPortAndPeers(ip, port string, peers map[int]string) *Node {
 		cancel:    cancel,
 		events:    make(chan Event, 64),
 		log:       slog.With("node_id", id, "ip", ip),
+		logBuffer: NewLogBuffer(1000),
+		logQueue:  make(chan protocol.LogEntry, 256),
 	}
+}
+
+func (n *Node) SetLogger(logger *slog.Logger) {
+	n.log = logger
 }
 
 func (n *Node) SetHTTPAddr(addr string) {
@@ -137,6 +147,7 @@ func (n *Node) Start() {
 	}
 
 	go n.eventLoop()
+	go n.logWorker()
 	go n.scheduleStartupElection()
 }
 
@@ -204,6 +215,10 @@ func (n *Node) dispatchMessage(msg protocol.Message, fromAddr string) {
 	case protocol.Coordinator:
 		n.log.Info("recv COORDINATOR", "from", msg.NodeID)
 		n.handleCoordinator(msg.NodeID)
+	case protocol.LogEvent:
+		if n.State == Coordinator && msg.LogData != nil {
+			n.logBuffer.Add(*msg.LogData)
+		}
 	}
 }
 
@@ -256,6 +271,73 @@ func (n *Node) handleStartupElection() {
 	}
 }
 
+func (n *Node) captureLog(entry protocol.LogEntry) {
+	n.mu.Lock()
+	isCoord := n.State == Coordinator
+	coordID := n.CoordinatorID
+	n.mu.Unlock()
+
+	if isCoord {
+		n.logBuffer.Add(entry)
+	} else if coordID > 0 && coordID != n.ID {
+		select {
+		case n.logQueue <- entry:
+		default:
+		}
+	}
+}
+
+func (n *Node) logWorker() {
+	for {
+		select {
+		case <-n.ctx.Done():
+			return
+		case entry := <-n.logQueue:
+			n.sendLog(entry)
+		}
+	}
+}
+
+func (n *Node) sendLog(entry protocol.LogEntry) {
+	n.mu.Lock()
+	addr, ok := n.Peers[n.CoordinatorID]
+	n.mu.Unlock()
+	if !ok {
+		return
+	}
+	msg := protocol.Message{
+		Type:      protocol.LogEvent,
+		NodeID:    n.ID,
+		Timestamp: entry.Timestamp,
+		LogData:   &entry,
+	}
+	_ = transport.SendMessage(addr, msg)
+}
+
+func (n *Node) getLogsHandler(w http.ResponseWriter, r *http.Request) {
+	filterNodeID := r.URL.Query().Get("node_id")
+	filterLevel := r.URL.Query().Get("level")
+
+	logs := n.logBuffer.GetAll()
+
+	var filtered []protocol.LogEntry
+	for _, log := range logs {
+		if filterNodeID != "" && fmt.Sprint(log.NodeID) != filterNodeID {
+			continue
+		}
+		if filterLevel != "" && log.Level != filterLevel {
+			continue
+		}
+		filtered = append(filtered, log)
+	}
+	if filtered == nil {
+		filtered = []protocol.LogEntry{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(filtered)
+}
+
 func (n *Node) startHTTPServer() {
 	if n.httpAddr == "" {
 		return
@@ -274,6 +356,7 @@ func (n *Node) startHTTPServer() {
 		mux.HandleFunc("/api/login", auth.LoginHandler(n.UserStore, n.SessionStore))
 		mux.HandleFunc("/api/logout", auth.LogoutHandler(n.SessionStore))
 		protected := auth.AuthMiddleware(n.SessionStore)
+		adminProtected := adminMiddleware(protected)
 		mux.Handle("/api/me", protected(http.HandlerFunc(auth.MeHandler())))
 
 		if n.PacienteStore != nil {
@@ -301,17 +384,26 @@ func (n *Node) startHTTPServer() {
 			mux.Handle("POST /api/organos", protected(http.HandlerFunc(organoAPI.Create)))
 			mux.Handle("PUT /api/organos/{id}", protected(http.HandlerFunc(organoAPI.Update)))
 			mux.Handle("DELETE /api/organos/{id}", protected(http.HandlerFunc(organoAPI.Delete)))
+
+			if n.PacienteStore != nil {
+				organoCompatibles := &api.OrganoCompatiblesHandler{
+					OrganoStore:   n.OrganoStore,
+					PacienteStore: n.PacienteStore,
+				}
+				mux.Handle("GET /api/organos/compatibles", protected(http.HandlerFunc(organoCompatibles.ListCompatibles)))
+			}
 		}
 
 		if n.UserStore != nil {
 			userAPI := &api.UserAPI{Store: n.UserStore}
-			adminProtected := adminMiddleware(protected)
 			mux.Handle("GET /api/usuarios", adminProtected(http.HandlerFunc(userAPI.List)))
 			mux.Handle("GET /api/usuarios/{id}", adminProtected(http.HandlerFunc(userAPI.Get)))
 			mux.Handle("POST /api/usuarios", adminProtected(http.HandlerFunc(userAPI.Create)))
 			mux.Handle("PUT /api/usuarios/{id}", adminProtected(http.HandlerFunc(userAPI.Update)))
 			mux.Handle("DELETE /api/usuarios/{id}", adminProtected(http.HandlerFunc(userAPI.Delete)))
 		}
+
+		mux.Handle("GET /api/admin/logs", adminProtected(http.HandlerFunc(n.getLogsHandler)))
 
 		if n.TrasplanteStore != nil {
 			trasplanteAPI := &api.EntityAPI[*data.Trasplante]{Store: n.TrasplanteStore}

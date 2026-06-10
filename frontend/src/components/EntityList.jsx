@@ -1,16 +1,36 @@
 import { useState, useEffect } from 'react'
-import { BackButton } from './BackButton'
 
 export function EntityList({ api, columns, title, Form }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [form, setForm] = useState(null)
+  const [relatedData, setRelatedData] = useState({})
 
   const load = () => {
     setLoading(true)
-    api.list()
-      .then(setItems)
+    const resolveCols = columns.filter(c => c.resolve?.api)
+    const apis = resolveCols.length > 0
+      ? [...new Set(resolveCols.map(c => c.resolve.api))]
+      : []
+
+    Promise.all([api.list(), ...apis.map(a => a.list())])
+      .then(([items, ...relatedResults]) => {
+        setItems(items)
+        if (resolveCols.length > 0) {
+          const related = {}
+          for (const col of resolveCols) {
+            const apiIndex = apis.indexOf(col.resolve.api)
+            const data = relatedResults[apiIndex]
+            const map = {}
+            for (const item of data) {
+              map[item.id] = item[col.resolve.displayKey] || item.id
+            }
+            related[col.key] = map
+          }
+          setRelatedData(related)
+        }
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }
@@ -49,7 +69,6 @@ export function EntityList({ api, columns, title, Form }) {
     <div className="entity-page">
       <header className="entity-header">
         <div className="entity-header-left">
-          <BackButton />
           <h2>{title}</h2>
         </div>
         <button className="btn-primary" onClick={() => { setForm({}); setError('') }}>+ Nuevo</button>
@@ -69,7 +88,17 @@ export function EntityList({ api, columns, title, Form }) {
             )}
             {items.map(item => (
               <tr key={item.id}>
-                {columns.map(c => <td key={c.key}>{item[c.key] ?? '-'}</td>)}
+                {columns.map(c => {
+                  let display
+                  if (c.resolve?.format) {
+                    display = c.resolve.format(item[c.key])
+                  } else if (c.resolve?.api) {
+                    display = relatedData[c.key]?.[item[c.key]]
+                  } else {
+                    display = item[c.key]
+                  }
+                  return <td key={c.key}>{display ?? '-'}</td>
+                })}
                 <td className="actions">
                   <button className="btn-sm" onClick={() => setForm(item)}>Editar</button>
                   <button className="btn-sm danger" onClick={() => handleDelete(item.id)}>Eliminar</button>
@@ -88,8 +117,29 @@ function EntityForm({ title, fields, initial, onSave, onCancel, error: serverErr
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState('')
   const [showPw, setShowPw] = useState({})
+  const [asyncOptions, setAsyncOptions] = useState({})
 
-  const handleChange = (key, value) => setData(prev => ({ ...prev, [key]: value }))
+  useEffect(() => {
+    const asyncFields = fields.filter(f => f.type === 'async-select')
+    for (const f of asyncFields) {
+      f.api.list().then(items => {
+        setAsyncOptions(prev => ({ ...prev, [f.key]: items }))
+      })
+    }
+  }, [fields])
+
+  const handleChange = (key, value) => {
+    const field = fields.find(f => f.key === key)
+    setData(prev => {
+      const next = { ...prev, [key]: value }
+      if (field?.sync && field.type === 'async-select') {
+        const items = asyncOptions[key] || []
+        const selected = items.find(i => String(i.id) === String(value))
+        if (selected) next[field.sync.field] = selected[field.sync.source]
+      }
+      return next
+    })
+  }
 
   const handleSubmit = async e => {
     e.preventDefault()
@@ -105,7 +155,7 @@ function EntityForm({ title, fields, initial, onSave, onCancel, error: serverErr
     delete payload.password_confirm
     for (const key of Object.keys(payload)) {
       const field = fields.find(f => f.key === key)
-      if (field?.type === 'select' && typeof payload[key] === 'string') {
+      if ((field?.type === 'select' || field?.type === 'async-select') && typeof payload[key] === 'string') {
         const num = Number(payload[key])
         if (!isNaN(num)) payload[key] = num
       }
@@ -130,6 +180,15 @@ function EntityForm({ title, fields, initial, onSave, onCancel, error: serverErr
                 <option value="">Seleccionar...</option>
                 {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+            ) : f.type === 'async-select' ? (
+              <select value={data[f.key] || ''} onChange={e => handleChange(f.key, e.target.value)} required={f.required}>
+                <option value="">Seleccionar {f.label.toLowerCase()}...</option>
+                {(asyncOptions[f.key] || []).map(item => (
+                  <option key={item.id} value={item.id}>
+                    {f.format ? f.format(item) : item[f.displayKey] || item.id}
+                  </option>
+                ))}
+              </select>
             ) : f.type === 'number' ? (
               <input type="number" value={data[f.key] || ''} onChange={e => handleChange(f.key, +e.target.value)} required={f.required} />
             ) : f.type === 'password' ? (
@@ -146,7 +205,7 @@ function EntityForm({ title, fields, initial, onSave, onCancel, error: serverErr
                 </button>
               </div>
             ) : (
-              <input type="text" value={data[f.key] || ''} onChange={e => handleChange(f.key, e.target.value)} required={f.required} placeholder={f.placeholder} />
+              <input type="text" value={data[f.key] || ''} onChange={e => handleChange(f.key, e.target.value)} required={!f.readOnly && f.required} placeholder={f.placeholder} readOnly={f.readOnly} />
             )}
           </label>
         ))}

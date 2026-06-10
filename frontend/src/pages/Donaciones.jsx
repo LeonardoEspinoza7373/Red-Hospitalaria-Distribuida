@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { BackButton } from '../components/BackButton'
 import { organosAPI, donantesAPI } from '../api'
 
 const tiposOrgano = [
@@ -50,16 +49,16 @@ export function Donaciones() {
 
   if (form) return (
     <div className="entity-form-page">
-      <div className="entity-header">
-        <div className="entity-header-left">
-          <BackButton />
-          <h2>Registrar Extracción</h2>
-        </div>
-      </div>
+      <h2>Registrar Extracción</h2>
       <form className="entity-form" onSubmit={handleExtract}>
         <label>
           <span>Donante</span>
-          <select value={donanteId} onChange={e => setDonanteId(e.target.value)} required>
+          <select value={donanteId} onChange={e => {
+            const id = e.target.value
+            setDonanteId(id)
+            const d = donantes.find(d => String(d.id) === id)
+            if (d) setCompatibilidad(d.tipo_sangre)
+          }} required>
             <option value="">Seleccionar donante...</option>
             {donantes.map(d => <option key={d.id} value={d.id}>{d.nombre} (ID {d.id})</option>)}
           </select>
@@ -73,7 +72,7 @@ export function Donaciones() {
         </label>
         <label>
           <span>Compatibilidad</span>
-          <input type="text" value={compatibilidad} onChange={e => setCompatibilidad(e.target.value)} required placeholder="Ej: O+, A-..." />
+          <input type="text" value={compatibilidad} onChange={e => setCompatibilidad(e.target.value)} required placeholder="Se asigna del donante" readOnly />
         </label>
         <div className="form-actions">
           <button type="submit" className="btn-primary" disabled={busy}>{busy ? 'Registrando...' : 'Registrar Extracción'}</button>
@@ -86,10 +85,7 @@ export function Donaciones() {
   return (
     <div className="entity-page">
       <header className="entity-header">
-        <div className="entity-header-left">
-          <BackButton />
-          <h2>Donaciones (Extracciones)</h2>
-        </div>
+        <h2>Donaciones (Extracciones)</h2>
         <button className="btn-primary" onClick={() => setForm(true)}>+ Nueva Extracción</button>
       </header>
       {error && <div className="error">{error}</div>}
@@ -97,8 +93,7 @@ export function Donaciones() {
         <table className="entity-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Donante ID</th>
+              <th>Donante</th>
               <th>Tipo</th>
               <th>Compatibilidad</th>
               <th>Estado</th>
@@ -106,17 +101,19 @@ export function Donaciones() {
           </thead>
           <tbody>
             {extractions.length === 0 && (
-              <tr><td colSpan="5" className="empty">Sin registros</td></tr>
+              <tr><td colSpan="4" className="empty">Sin registros</td></tr>
             )}
-            {extractions.map(org => (
-              <tr key={org.id}>
-                <td>{org.id}</td>
-                <td>{org.donante_id}</td>
-                <td>{tiposOrgano.find(t => t.value === org.tipo)?.label || org.tipo}</td>
-                <td>{org.compatibilidad}</td>
-                <td>{org.estado === 'DISPONIBLE' ? <span style={{color: '#4ade80'}}>Disponible</span> : <span style={{color: '#f87171'}}>No Disponible</span>}</td>
-              </tr>
-            ))}
+            {extractions.map(org => {
+              const donante = donantes.find(d => d.id === org.donante_id)
+              return (
+                <tr key={org.id}>
+                  <td>{donante?.nombre || org.donante_id}</td>
+                  <td>{tiposOrgano.find(t => t.value === org.tipo)?.label || org.tipo}</td>
+                  <td>{org.compatibilidad}</td>
+                  <td>{org.estado === 'DISPONIBLE' ? <span style={{color: '#4ade80'}}>Disponible</span> : <span style={{color: '#f87171'}}>No Disponible</span>}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}

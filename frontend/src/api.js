@@ -62,3 +62,15 @@ export const donantesAPI = entityAPI('/api/donantes')
 export const organosAPI = entityAPI('/api/organos')
 export const trasplantesAPI = entityAPI('/api/trasplantes')
 export const usuariosAPI = entityAPI('/api/usuarios')
+
+export function organosCompatibles(pacienteId) {
+  return apiFetch(`${BASE}/api/organos/compatibles?paciente_id=${pacienteId}`)
+}
+
+export function fetchLogs(filters = {}) {
+  const params = new URLSearchParams()
+  if (filters.node_id) params.set('node_id', filters.node_id)
+  if (filters.level) params.set('level', filters.level)
+  const qs = params.toString()
+  return apiFetch(`${BASE}/api/admin/logs${qs ? '?' + qs : ''}`)
+}
