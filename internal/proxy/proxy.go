@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -19,6 +20,7 @@ type Proxy struct {
 	coordinatorID   int
 	coordinatorAddr string
 	lastHeartbeat   time.Time
+	wasStale        bool
 
 	tcpAddr    string
 	httpAddr   string
@@ -120,12 +122,20 @@ func (p *Proxy) setCoordinator(id int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if id != p.coordinatorID {
-		p.log.Info("coordinator changed", "old", p.coordinatorID, "new", id)
+	wasChange := id != p.coordinatorID
+
+	if wasChange {
 		p.coordinatorID = id
 		if addr, ok := p.nodeAddrs[id]; ok {
 			p.coordinatorAddr = addr
 		}
+	}
+
+	if p.wasStale {
+		p.wasStale = false
+		p.log.Warn(">>> COORDINADOR RECUPERADO <<<", "coordinator_id", id, "addr", p.coordinatorAddr)
+	} else if wasChange {
+		p.log.Info("coordinator changed", "old", p.coordinatorID, "new", id)
 	}
 	p.lastHeartbeat = time.Now()
 }
@@ -137,14 +147,85 @@ func (p *Proxy) getCoordinatorAddr() string {
 }
 
 func (p *Proxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/status" {
+		p.serveStatus(w)
+		return
+	}
+
 	addr := p.getCoordinatorAddr()
 	if addr == "" {
-		http.Error(w, "no coordinator available", http.StatusServiceUnavailable)
+		p.log.Warn(">>> SERVIDOR NO DISPONIBLE - coordinador no encontrado <<<")
+		p.serveUnavailable(w)
 		return
 	}
 	r.URL.Host = addr
 	r.URL.Scheme = "http"
 	p.rp.ServeHTTP(w, r)
+}
+
+func (p *Proxy) serveStatus(w http.ResponseWriter) {
+	p.mu.Lock()
+	id := p.coordinatorID
+	addr := p.coordinatorAddr
+	since := time.Since(p.lastHeartbeat)
+	ws := p.wasStale
+	p.mu.Unlock()
+
+	statusClass := "ok"
+	statusText := "OPERATIVO"
+	coordText := fmt.Sprintf("Nodo %d (%s)", id, addr)
+	if id == 0 {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		statusClass = "err"
+		statusText = "NO DISPONIBLE"
+		coordText = "ninguno"
+	}
+
+	recovery := "no"
+	if ws {
+		recovery = "sí (recuperado de caída)"
+	}
+
+	fmt.Fprintf(w, `<html>
+<head><title>Red Hospitalaria - Proxy</title>
+<style>
+body{font-family:monospace;background:#0f172a;color:#e2e8f0;padding:2rem}
+h1{color:#38bdf8;font-size:1.3rem}
+.ok{color:#4ade80}.warn{color:#facc15}.err{color:#f87171}
+pre{background:#1e293b;padding:1rem;border-radius:8px}
+</style>
+</head><body>
+<h1>Proxy - Red Hospitalaria Distribuida</h1>
+<pre>
+Estado:         <span class="%s">%s</span>
+Coordinador:    %s
+Último latido:  %v atrás
+Recuperación:   %v
+</pre>
+<p><a href="/">Volver al inicio</a></p>
+</body></html>`, statusClass, statusText, coordText, since.Round(time.Second), recovery)
+}
+
+func (p *Proxy) serveUnavailable(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusServiceUnavailable)
+	w.Write([]byte(`<html>
+<head><title>Red Hospitalaria - No Disponible</title>
+<style>
+body{font-family:monospace;background:#0f172a;color:#e2e8f0;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;flex-direction:column;text-align:center;padding:2rem}
+h1{color:#f87171;font-size:2rem;margin-bottom:0.5rem}
+p{color:#94a3b8;max-width:400px;line-height:1.6}
+code{color:#38bdf8}
+.refresh{color:#64748b;font-size:0.85rem;margin-top:2rem}
+</style>
+</head><body>
+<h1>Sistema No Disponible</h1>
+<p>El coordinador actual ha fallado. Los nodos están ejecutando una nueva elección. Por favor espere...</p>
+<p><code>Intente nuevamente en unos segundos</code></p>
+<p class="refresh">La página se recargará automáticamente <span id="secs">15</span>s</p>
+<script>
+let s=15;setInterval(()=>{s--;document.getElementById('secs').textContent=s;if(s<=0)location.reload()},1000)
+</script>
+</body></html>`))
 }
 
 func (p *Proxy) directRequest(r *http.Request) {
@@ -171,7 +252,7 @@ func (p *Proxy) healthLoop() {
 			p.mu.Unlock()
 
 			if stale {
-				p.log.Warn("coordinator heartbeat stale, clearing")
+		p.log.Warn("🔥🔥 COORDINADOR CAÍDO - Iniciando elección en los nodos... 🔥🔥")
 				p.clearCoordinator()
 			}
 		}
@@ -181,6 +262,7 @@ func (p *Proxy) healthLoop() {
 func (p *Proxy) clearCoordinator() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.wasStale = true
 	p.coordinatorID = 0
 	p.coordinatorAddr = ""
 }
