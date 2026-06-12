@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile.nodo
     container_name: nodo1
     hostname: nodo1
+    environment:
+      NODE_IP: 192.168.1.13
     networks:
       cluster-net:
         ipv4_address: 192.168.1.13
@@ -18,6 +20,8 @@ services:
       dockerfile: Dockerfile.nodo
     container_name: nodo2
     hostname: nodo2
+    environment:
+      NODE_IP: 192.168.1.12
     networks:
       cluster-net:
         ipv4_address: 192.168.1.12
@@ -31,6 +35,8 @@ services:
       dockerfile: Dockerfile.nodo
     container_name: nodo3
     hostname: nodo3
+    environment:
+      NODE_IP: 192.168.1.11
     networks:
       cluster-net:
         ipv4_address: 192.168.1.11
@@ -44,6 +50,8 @@ services:
       dockerfile: Dockerfile.nodo
     container_name: nodo4
     hostname: nodo4
+    environment:
+      NODE_IP: 192.168.1.10
     networks:
       cluster-net:
         ipv4_address: 192.168.1.10

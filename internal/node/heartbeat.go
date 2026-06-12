@@ -86,8 +86,15 @@ func (n *Node) handleHeartbeat(fromID, coordID int) {
 	}
 
 	if coordID < myID {
-		n.log.Info("detected lower-ID coordinator, starting election")
-		n.startElection()
+		n.mu.Lock()
+		enabled := n.BullyEnabled
+		n.mu.Unlock()
+		if enabled {
+			n.log.Info("detected lower-ID coordinator, starting election")
+			n.startElection()
+		} else {
+			n.log.Warn("detected lower-ID coordinator but bully disabled, ignoring")
+		}
 		return
 	}
 
@@ -107,8 +114,13 @@ func (n *Node) handleHeartbeatWatchTimeout() {
 		n.mu.Unlock()
 		return
 	}
+	bullyEnabled := n.BullyEnabled
 	n.mu.Unlock()
 
 	n.log.Warn("heartbeat timeout - coordinator may be down")
-	n.startElection()
+	if bullyEnabled {
+		n.startElection()
+	} else {
+		n.log.Warn("bully algorithm disabled - not starting election, proxy will return 503")
+	}
 }

@@ -35,7 +35,7 @@ function authHeaders() {
   }
 }
 
-async function apiFetch(url, options = {}) {
+export async function apiFetch(url, options = {}) {
   const res = await fetch(url, { ...options, headers: { ...authHeaders(), ...options.headers } })
   if (res.status === 401) {
     localStorage.removeItem('token')

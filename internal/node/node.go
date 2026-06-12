@@ -77,6 +77,8 @@ type Node struct {
 
 	logBuffer *LogBuffer
 	logQueue  chan protocol.LogEntry
+
+	BullyEnabled bool
 }
 
 func New(ip string) *Node {
@@ -118,6 +120,7 @@ func NewWithPortAndPeers(ip, port string, peers map[int]string) *Node {
 		log:       slog.With("node_id", id, "ip", ip),
 		logBuffer: NewLogBuffer(1000),
 		logQueue:  make(chan protocol.LogEntry, 256),
+		BullyEnabled: true,
 	}
 }
 
@@ -131,6 +134,28 @@ func (n *Node) SetHTTPAddr(addr string) {
 
 func (n *Node) SetFrontendDir(dir string) {
 	n.frontendDir = dir
+}
+
+func (n *Node) IsBullyEnabled() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.BullyEnabled
+}
+
+func (n *Node) SetBullyEnabled(enabled bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.BullyEnabled = enabled
+	n.log.Info("bully algorithm toggled", "enabled", enabled)
+	if enabled {
+		// Force an immediate election check
+		go func() {
+			select {
+			case n.events <- Event{Type: StartupElection}:
+			case <-n.ctx.Done():
+			}
+		}()
+	}
 }
 
 func (n *Node) Start() {
@@ -404,6 +429,13 @@ func (n *Node) startHTTPServer() {
 		}
 
 		mux.Handle("GET /api/admin/logs", adminProtected(http.HandlerFunc(n.getLogsHandler)))
+
+		bullyHandler := &api.BullyHandler{
+			IsEnabled:  n.IsBullyEnabled,
+			SetEnabled: n.SetBullyEnabled,
+		}
+		mux.Handle("GET /api/admin/bully", adminProtected(http.HandlerFunc(bullyHandler.GetStatus)))
+		mux.Handle("POST /api/admin/bully", adminProtected(http.HandlerFunc(bullyHandler.SetStatus)))
 
 		if n.TrasplanteStore != nil {
 			trasplanteAPI := &api.EntityAPI[*data.Trasplante]{Store: n.TrasplanteStore}

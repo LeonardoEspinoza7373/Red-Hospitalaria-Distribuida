@@ -16,6 +16,17 @@ import (
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/pkg/config"
 )
 
+func resolveNodeIP() string {
+	if ip := os.Getenv("NODE_IP"); ip != "" {
+		if _, exists := config.IPToID[ip]; exists {
+			return ip
+		}
+		slog.Error("NODE_IP no está en la configuración", "ip", ip)
+	}
+
+	return getLocalIP()
+}
+
 func getLocalIP() string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -47,22 +58,22 @@ func main() {
 	baseHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
 	slog.SetDefault(slog.New(baseHandler))
 
-	ip := getLocalIP()
+	ip := resolveNodeIP()
 	if ip == "" {
 		slog.Error("no se pudo detectar una IP válida (192.168.1.10-13)")
-		slog.Info("asegúrate de estar conectado a la red RedHospitalaria")
+		slog.Info("asegúrate de ejecutar el contenedor en la red correcta o de definir NODE_IP")
 		os.Exit(1)
 	}
 
 	n := node.New(ip)
-
-	captureHandler := node.NewCaptureHandler(slog.Default().Handler(), n)
-	slog.SetDefault(slog.New(captureHandler))
-	n.SetLogger(slog.With("node_id", n.ID, "ip", n.IP))
 	if n == nil {
 		slog.Error("IP detectada no está en la configuración", "ip", ip)
 		os.Exit(1)
 	}
+
+	captureHandler := node.NewCaptureHandler(slog.Default().Handler(), n)
+	slog.SetDefault(slog.New(captureHandler))
+	n.SetLogger(slog.With("node_id", n.ID, "ip", n.IP))
 
 	n.SetHTTPAddr(":" + config.FrontendPort)
 	n.SetFrontendDir("./frontend/dist")

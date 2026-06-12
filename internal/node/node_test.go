@@ -247,6 +247,33 @@ func TestBullyElection_HigherNodeJoinsLate(t *testing.T) {
 	t.Log("node 4 correctly took over as coordinator")
 }
 
+func TestBullyElection_DisabledDoesNotPromoteOnTimeout(t *testing.T) {
+	initTestConfig()
+
+	n := NewWithPortAndPeers(testIPs[1], "10040", map[int]string{})
+	if n == nil {
+		t.Fatal("failed to create node")
+	}
+
+	n.mu.Lock()
+	n.State = Candidate
+	n.gotOK = true
+	n.BullyEnabled = false
+	n.mu.Unlock()
+
+	n.handleElectionTimeout()
+
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	if n.State != Follower {
+		t.Fatalf("expected follower state when bully is disabled, got %v", n.State)
+	}
+	if n.CoordinatorID != 0 {
+		t.Fatalf("expected coordinator id to remain unchanged, got %d", n.CoordinatorID)
+	}
+}
+
 func TestMain(m *testing.M) {
 	config.HeartbeatInterval = 1 * time.Second
 	config.HeartbeatTimeout = 3 * time.Second

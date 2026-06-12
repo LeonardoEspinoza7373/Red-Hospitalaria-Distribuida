@@ -11,10 +11,17 @@ import (
 
 func (n *Node) startElection() {
 	n.mu.Lock()
+	if !n.BullyEnabled {
+		n.log.Warn("election blocked: bully algorithm disabled")
+		n.mu.Unlock()
+		return
+	}
+
 	if n.State == Coordinator || n.State == Candidate {
 		n.mu.Unlock()
 		return
 	}
+
 	n.State = Candidate
 	n.gotOK = false
 	n.electionSeq++
@@ -55,7 +62,19 @@ func (n *Node) handleElectionTimeout() {
 		return
 	}
 	gotOK := n.gotOK
+	bullyEnabled := n.BullyEnabled
 	n.mu.Unlock()
+
+	if !bullyEnabled {
+		n.log.Warn("election timed out but bully disabled - staying follower")
+		n.mu.Lock()
+		if n.State == Candidate {
+			n.State = Follower
+		}
+		n.gotOK = false
+		n.mu.Unlock()
+		return
+	}
 
 	if gotOK {
 		n.log.Info("OK received during election, waiting for new coordinator")
@@ -101,7 +120,7 @@ func (n *Node) handleElection(fromID int, fromAddr string) {
 	}
 
 	n.mu.Lock()
-	shouldStart := n.State != Candidate && n.State != Coordinator
+	shouldStart := n.State != Candidate && n.State != Coordinator && n.BullyEnabled
 	n.mu.Unlock()
 
 	if shouldStart {
@@ -122,6 +141,12 @@ func (n *Node) becomeCoordinator() {
 	n.mu.Lock()
 	if n.State == Coordinator {
 		n.mu.Unlock()
+		return
+	}
+	if !n.BullyEnabled {
+		n.State = Follower
+		n.mu.Unlock()
+		n.log.Warn("coordinator promotion blocked: bully algorithm disabled")
 		return
 	}
 	n.State = Coordinator
