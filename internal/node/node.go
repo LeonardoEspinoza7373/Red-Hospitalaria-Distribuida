@@ -7,14 +7,18 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/api"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/auth"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/data"
+	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/lock"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/protocol"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/transport"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/pkg/config"
@@ -79,6 +83,10 @@ type Node struct {
 	logQueue  chan protocol.LogEntry
 
 	BullyEnabled bool
+	LockManager  *lock.LockManager
+
+	timeOffset   time.Duration
+	timeSyncMu   sync.Mutex
 }
 
 func New(ip string) *Node {
@@ -146,7 +154,7 @@ func (n *Node) SetBullyEnabled(enabled bool) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.BullyEnabled = enabled
-	n.log.Info("bully algorithm toggled", "enabled", enabled)
+	n.log.Info("bully algorithm toggled", "enabled", enabled, "category", "bully")
 	if enabled {
 		// Force an immediate election check
 		go func() {
@@ -174,6 +182,9 @@ func (n *Node) Start() {
 	go n.eventLoop()
 	go n.logWorker()
 	go n.scheduleStartupElection()
+
+	n.startHTTPServer()
+	n.startPeriodicTimeSync()
 }
 
 func (n *Node) Stop() {
@@ -188,9 +199,96 @@ func (n *Node) Stop() {
 	}
 	n.mu.Unlock()
 	n.stopHTTPServer()
+	if n.LockManager != nil {
+		n.LockManager.Stop()
+	}
 	if n.server != nil {
 		n.server.Stop()
 	}
+}
+
+func (n *Node) Now() time.Time {
+	n.timeSyncMu.Lock()
+	offset := n.timeOffset
+	n.timeSyncMu.Unlock()
+	return time.Now().Add(offset)
+}
+
+func (n *Node) syncWithCoordinator() {
+	n.mu.Lock()
+	coordID := n.CoordinatorID
+	n.mu.Unlock()
+
+	if coordID == 0 || coordID == n.ID {
+		return
+	}
+
+	coordIP, ok := config.IDToIP[coordID]
+	if !ok {
+		return
+	}
+
+	url := fmt.Sprintf("http://%s:%s/api/internal/time", coordIP, config.FrontendPort)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	T1 := time.Now()
+	resp, err := client.Get(url)
+	if err != nil {
+		n.log.Warn("time sync request failed", "error", err, "coordinator", coordIP)
+		return
+	}
+	defer resp.Body.Close()
+	T2 := time.Now()
+
+	var body struct {
+		ServerTime int64 `json:"server_time"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		n.log.Warn("time sync decode failed", "error", err)
+		return
+	}
+
+	serverAt := time.Unix(0, body.ServerTime)
+	oneWay := T2.Sub(T1) / 2
+	serverTimeAtT2 := serverAt.Add(oneWay)
+	offset := serverTimeAtT2.Sub(T2)
+
+	n.timeSyncMu.Lock()
+	n.timeOffset = offset
+	n.timeSyncMu.Unlock()
+
+	n.log.Info("time synchronized", "offset_ns", offset, "rtt", T2.Sub(T1))
+}
+
+func (n *Node) timeSyncHandler(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int64{
+		"server_time": now.UnixNano(),
+	})
+}
+
+func (n *Node) scheduleTimeSync() {
+	n.log.Info("scheduling initial time sync", "category", "system")
+	time.AfterFunc(2*time.Second, func() {
+		n.syncWithCoordinator()
+	})
+}
+
+func (n *Node) startPeriodicTimeSync() {
+	n.log.Info("starting periodic time sync", "interval", config.TimeSyncInterval, "category", "system")
+	go func() {
+		ticker := time.NewTicker(config.TimeSyncInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-n.ctx.Done():
+				return
+			case <-ticker.C:
+				n.syncWithCoordinator()
+			}
+		}
+	}()
 }
 
 func (n *Node) onMessage(msg protocol.Message, addr net.Addr) {
@@ -229,20 +327,24 @@ func (n *Node) handleEvent(evt Event) {
 func (n *Node) dispatchMessage(msg protocol.Message, fromAddr string) {
 	switch msg.Type {
 	case protocol.Heartbeat:
-		n.log.Debug("recv HEARTBEAT", "from", msg.NodeID, "coord", msg.CoordinatorID)
+		n.log.Debug("recv HEARTBEAT", "category", "heartbeat", "from", msg.NodeID, "coord", msg.CoordinatorID)
 		n.handleHeartbeat(msg.NodeID, msg.CoordinatorID)
 	case protocol.Election:
-		n.log.Debug("recv ELECTION", "from", msg.NodeID)
+		n.log.Debug("recv ELECTION", "category", "bully", "from", msg.NodeID)
 		n.handleElection(msg.NodeID, fromAddr)
 	case protocol.OK:
-		n.log.Debug("recv OK", "from", msg.NodeID)
+		n.log.Debug("recv OK", "category", "bully", "from", msg.NodeID)
 		n.handleOK(msg.NodeID)
 	case protocol.Coordinator:
-		n.log.Info("recv COORDINATOR", "from", msg.NodeID)
+		n.log.Info("recv COORDINATOR", "category", "bully", "from", msg.NodeID)
 		n.handleCoordinator(msg.NodeID)
 	case protocol.LogEvent:
 		if n.State == Coordinator && msg.LogData != nil {
 			n.logBuffer.Add(*msg.LogData)
+		}
+	case protocol.SyncEvent:
+		if msg.SyncPayload != nil {
+			n.handleSyncEvent(msg.NodeID, msg.SyncPayload)
 		}
 	}
 }
@@ -262,7 +364,7 @@ func (n *Node) broadcast(msg protocol.Message) {
 		peerAddr := addr
 		go func() {
 			if err := transport.SendMessage(peerAddr, msg); err != nil {
-				n.log.Warn("broadcast failed", "peer", peerAddr, "error", err)
+				n.log.Warn("broadcast failed", "peer", peerAddr, "error", err, "category", "bully")
 			}
 		}()
 	}
@@ -291,12 +393,16 @@ func (n *Node) handleStartupElection() {
 	n.mu.Unlock()
 
 	if !hasCoordinator {
-		n.log.Info("no coordinator found on startup, starting election")
+		n.log.Info("no coordinator found on startup, starting election", "category", "bully")
 		n.startElection()
 	}
 }
 
 func (n *Node) captureLog(entry protocol.LogEntry) {
+	if entry.Category == "heartbeat" {
+		return
+	}
+
 	n.mu.Lock()
 	isCoord := n.State == Coordinator
 	coordID := n.CoordinatorID
@@ -342,6 +448,7 @@ func (n *Node) sendLog(entry protocol.LogEntry) {
 func (n *Node) getLogsHandler(w http.ResponseWriter, r *http.Request) {
 	filterNodeID := r.URL.Query().Get("node_id")
 	filterLevel := r.URL.Query().Get("level")
+	filterCategory := r.URL.Query().Get("category")
 
 	logs := n.logBuffer.GetAll()
 
@@ -351,6 +458,9 @@ func (n *Node) getLogsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if filterLevel != "" && log.Level != filterLevel {
+			continue
+		}
+		if filterCategory != "" && log.Category != filterCategory {
 			continue
 		}
 		filtered = append(filtered, log)
@@ -376,6 +486,8 @@ func (n *Node) startHTTPServer() {
 	n.mu.Unlock()
 
 	mux := http.NewServeMux()
+	forwardMux := n.apiForwardMiddleware(mux)
+	loggedMux := n.apiLogMiddleware(forwardMux)
 
 	if n.UserStore != nil && n.SessionStore != nil {
 		mux.HandleFunc("/api/login", auth.LoginHandler(n.UserStore, n.SessionStore))
@@ -385,7 +497,7 @@ func (n *Node) startHTTPServer() {
 		mux.Handle("/api/me", protected(http.HandlerFunc(auth.MeHandler())))
 
 		if n.PacienteStore != nil {
-			pacienteAPI := &api.EntityAPI[*data.Paciente]{Store: n.PacienteStore}
+			pacienteAPI := &api.EntityAPI[*data.Paciente]{Store: n.PacienteStore, Model: "paciente", OnWrite: n.syncCallback()}
 			mux.Handle("GET /api/pacientes", protected(http.HandlerFunc(pacienteAPI.List)))
 			mux.Handle("GET /api/pacientes/{id}", protected(http.HandlerFunc(pacienteAPI.Get)))
 			mux.Handle("POST /api/pacientes", protected(http.HandlerFunc(pacienteAPI.Create)))
@@ -394,7 +506,7 @@ func (n *Node) startHTTPServer() {
 		}
 
 		if n.DonanteStore != nil {
-			donanteAPI := &api.EntityAPI[*data.Donante]{Store: n.DonanteStore}
+			donanteAPI := &api.EntityAPI[*data.Donante]{Store: n.DonanteStore, Model: "donante", OnWrite: n.syncCallback()}
 			mux.Handle("GET /api/donantes", protected(http.HandlerFunc(donanteAPI.List)))
 			mux.Handle("GET /api/donantes/{id}", protected(http.HandlerFunc(donanteAPI.Get)))
 			mux.Handle("POST /api/donantes", protected(http.HandlerFunc(donanteAPI.Create)))
@@ -403,7 +515,7 @@ func (n *Node) startHTTPServer() {
 		}
 
 		if n.OrganoStore != nil {
-			organoAPI := &api.EntityAPI[*data.Organo]{Store: n.OrganoStore}
+			organoAPI := &api.EntityAPI[*data.Organo]{Store: n.OrganoStore, Model: "organo", OnWrite: n.syncCallback()}
 			mux.Handle("GET /api/organos", protected(http.HandlerFunc(organoAPI.List)))
 			mux.Handle("GET /api/organos/{id}", protected(http.HandlerFunc(organoAPI.Get)))
 			mux.Handle("POST /api/organos", protected(http.HandlerFunc(organoAPI.Create)))
@@ -420,7 +532,7 @@ func (n *Node) startHTTPServer() {
 		}
 
 		if n.UserStore != nil {
-			userAPI := &api.UserAPI{Store: n.UserStore}
+			userAPI := &api.UserAPI{Store: n.UserStore, OnWrite: n.syncCallback()}
 			mux.Handle("GET /api/usuarios", adminProtected(http.HandlerFunc(userAPI.List)))
 			mux.Handle("GET /api/usuarios/{id}", adminProtected(http.HandlerFunc(userAPI.Get)))
 			mux.Handle("POST /api/usuarios", adminProtected(http.HandlerFunc(userAPI.Create)))
@@ -438,20 +550,29 @@ func (n *Node) startHTTPServer() {
 		mux.Handle("POST /api/admin/bully", adminProtected(http.HandlerFunc(bullyHandler.SetStatus)))
 
 		if n.TrasplanteStore != nil {
-			trasplanteAPI := &api.EntityAPI[*data.Trasplante]{Store: n.TrasplanteStore}
+			trasplanteAPI := &api.EntityAPI[*data.Trasplante]{Store: n.TrasplanteStore, Model: "trasplante", OnWrite: n.syncCallback()}
 			mux.Handle("GET /api/trasplantes", protected(http.HandlerFunc(trasplanteAPI.List)))
 			mux.Handle("GET /api/trasplantes/{id}", protected(http.HandlerFunc(trasplanteAPI.Get)))
 			mux.Handle("POST /api/trasplantes", protected(http.HandlerFunc(trasplanteAPI.Create)))
 			mux.Handle("PUT /api/trasplantes/{id}", protected(http.HandlerFunc(trasplanteAPI.Update)))
 			mux.Handle("DELETE /api/trasplantes/{id}", protected(http.HandlerFunc(trasplanteAPI.Delete)))
 		}
+
+		if n.LockManager != nil {
+			lockHandler := &lock.Handler{Manager: n.LockManager}
+			mux.Handle("POST /api/lock", protected(http.HandlerFunc(lockHandler.Acquire)))
+			mux.Handle("POST /api/unlock", protected(http.HandlerFunc(lockHandler.Release)))
+			mux.Handle("GET /api/locks", protected(http.HandlerFunc(lockHandler.List)))
+		}
 	}
+
+	mux.HandleFunc("/api/internal/time", n.timeSyncHandler)
 
 	mux.HandleFunc("/", n.frontendHandler)
 
 	server := &http.Server{
 		Addr:    n.httpAddr,
-		Handler: mux,
+		Handler: loggedMux,
 	}
 
 	n.mu.Lock()
@@ -485,6 +606,216 @@ func (n *Node) stopHTTPServer() {
 func adminMiddleware(authMW func(http.Handler) http.Handler) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return authMW(auth.AdminMiddleware(next))
+	}
+}
+
+func (n *Node) apiLogMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Path) >= 4 && r.URL.Path[:4] == "/api" {
+			rw := &responseWriter{ResponseWriter: w, status: 200}
+			next.ServeHTTP(rw, r)
+			n.captureLog(protocol.LogEntry{
+				NodeID:    n.ID,
+				Level:     "INFO",
+				Category:  "api",
+				Message:   r.Method + " " + r.URL.Path + " -> " + strconv.Itoa(rw.status),
+				Timestamp: time.Now().Unix(),
+			})
+		} else {
+			next.ServeHTTP(w, r)
+		}
+	})
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.status = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (n *Node) apiForwardMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		n.mu.Lock()
+		isCoord := n.State == Coordinator
+		coordID := n.CoordinatorID
+		n.mu.Unlock()
+
+		if !isCoord && coordID > 0 {
+			n.forwardToCoordinator(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (n *Node) forwardToCoordinator(w http.ResponseWriter, r *http.Request) {
+	n.mu.Lock()
+	coordID := n.CoordinatorID
+	n.mu.Unlock()
+
+	coordIP, ok := config.IDToIP[coordID]
+	if !ok {
+		http.Error(w, `{"error":"coordinador no disponible"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	coordAddr := net.JoinHostPort(coordIP, config.FrontendPort)
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = "http"
+			req.URL.Host = coordAddr
+			req.Host = coordAddr
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			n.log.Warn("forward to coordinator failed", "error", err, "coordinator", coordAddr)
+			http.Error(w, `{"error":"coordinador no responde"}`, http.StatusBadGateway)
+		},
+	}
+	proxy.ServeHTTP(w, r)
+}
+
+func (n *Node) syncCallback() func(action, model string, id int, data json.RawMessage) {
+	return func(action, model string, id int, data json.RawMessage) {
+		n.mu.Lock()
+		coordID := n.CoordinatorID
+		isCoord := n.State == Coordinator
+		n.mu.Unlock()
+		if !isCoord || coordID != n.ID {
+			return
+		}
+		n.broadcastSync(&protocol.SyncPayload{
+			Model:  model,
+			Action: action,
+			ID:     id,
+			Data:   data,
+		})
+	}
+}
+
+func (n *Node) broadcastSync(payload *protocol.SyncPayload) {
+	msg := protocol.Message{
+		Type:        protocol.SyncEvent,
+		NodeID:      n.ID,
+		Timestamp:   time.Now().Unix(),
+		SyncPayload: payload,
+	}
+	for _, addr := range n.Peers {
+		peerAddr := addr
+		go func() {
+			if err := transport.SendMessage(peerAddr, msg); err != nil {
+				n.log.Warn("sync broadcast failed", "peer", peerAddr, "error", err)
+			}
+		}()
+	}
+}
+
+func (n *Node) handleSyncEvent(fromID int, payload *protocol.SyncPayload) {
+	n.log.Debug("received sync event", "from", fromID, "action", payload.Action, "model", payload.Model, "id", payload.ID)
+
+	switch payload.Model {
+	case "paciente":
+		n.syncGeneric(n.PacienteStore, payload)
+	case "donante":
+		n.syncGeneric(n.DonanteStore, payload)
+	case "organo":
+		n.syncGeneric(n.OrganoStore, payload)
+	case "trasplante":
+		n.syncGeneric(n.TrasplanteStore, payload)
+	case "usuario":
+		n.syncUsers(payload)
+	}
+}
+
+func (n *Node) syncGeneric(store any, payload *protocol.SyncPayload) {
+	if store == nil {
+		return
+	}
+	switch s := store.(type) {
+	case *data.GenericStore[*data.Paciente]:
+		syncStore(s, payload, n.log)
+	case *data.GenericStore[*data.Donante]:
+		syncStore(s, payload, n.log)
+	case *data.GenericStore[*data.Organo]:
+		syncStore(s, payload, n.log)
+	case *data.GenericStore[*data.Trasplante]:
+		syncStore(s, payload, n.log)
+	}
+}
+
+func syncStore[T data.Entity](s *data.GenericStore[T], payload *protocol.SyncPayload, log *slog.Logger) {
+	switch payload.Action {
+	case "create":
+		if len(payload.Data) == 0 {
+			return
+		}
+		var item T
+		if err := json.Unmarshal(payload.Data, &item); err != nil {
+			log.Warn("sync unmarshal failed", "model", payload.Model, "error", err)
+			return
+		}
+		if err := s.SyncCreate(item); err != nil {
+			log.Warn("sync create failed", "model", payload.Model, "error", err)
+		}
+	case "update":
+		if len(payload.Data) == 0 {
+			return
+		}
+		var item T
+		if err := json.Unmarshal(payload.Data, &item); err != nil {
+			log.Warn("sync unmarshal failed", "model", payload.Model, "error", err)
+			return
+		}
+		if err := s.SyncUpdate(item); err != nil {
+			log.Warn("sync update failed", "model", payload.Model, "error", err)
+		}
+	case "delete":
+		if err := s.Delete(payload.ID); err != nil {
+			log.Warn("sync delete failed", "model", payload.Model, "error", err)
+		}
+	}
+}
+
+func (n *Node) syncUsers(payload *protocol.SyncPayload) {
+	if n.UserStore == nil {
+		return
+	}
+	switch payload.Action {
+	case "create":
+		if len(payload.Data) == 0 {
+			return
+		}
+		var user data.User
+		if err := json.Unmarshal(payload.Data, &user); err != nil {
+			n.log.Warn("sync user unmarshal failed", "error", err)
+			return
+		}
+		if err := n.UserStore.SyncCreate(&user); err != nil {
+			n.log.Warn("sync user create failed", "error", err)
+		}
+	case "update":
+		if len(payload.Data) == 0 {
+			return
+		}
+		var user data.User
+		if err := json.Unmarshal(payload.Data, &user); err != nil {
+			n.log.Warn("sync user unmarshal failed", "error", err)
+			return
+		}
+		if err := n.UserStore.SyncUpdate(&user); err != nil {
+			n.log.Warn("sync user update failed", "error", err)
+		}
+	case "delete":
+		if err := n.UserStore.Delete(payload.ID); err != nil {
+			n.log.Warn("sync user delete failed", "error", err)
+		}
 	}
 }
 

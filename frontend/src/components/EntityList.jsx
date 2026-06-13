@@ -1,12 +1,69 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { acquireLock, releaseLock } from '../api'
 import { IconEye, IconEyeOff } from '../icons'
+import { useAuth } from '../AuthContext'
 
-export function EntityList({ api, columns, title, Form }) {
+const hospitals = {
+  1: 'Hospital Loja',
+  2: 'Hospital Cuenca',
+  3: 'Hospital Quito',
+  4: 'Hospital Guayaquil',
+}
+
+export function EntityList({ api, columns, title, Form, onFormChange, defaults }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [form, setForm] = useState(null)
   const [relatedData, setRelatedData] = useState({})
+  const [formLocked, setFormLocked] = useState(null)
+  const formResourceRef = useRef(null)
+  const renewRef = useRef(null)
+  const { user } = useAuth()
+
+  const openForm = async (data) => {
+    const resource = data.id ? `${title.toLowerCase()}:${data.id}` : `${title.toLowerCase()}:new`
+    try {
+      const result = await acquireLock(resource)
+      if (result.acquired) {
+        formResourceRef.current = resource
+        setForm(data)
+        setFormLocked(null)
+        renewRef.current = setInterval(async () => {
+          try { await acquireLock(resource) } catch {}
+        }, 30000)
+      } else if (result.user_id === user?.username) {
+        formResourceRef.current = resource
+        setForm(data)
+        setFormLocked(null)
+      } else {
+        setFormLocked({ userName: result.user_name, resource })
+      }
+    } catch {
+      setForm(data)
+    }
+    onFormChange?.(true)
+  }
+
+  const closeForm = () => {
+    if (renewRef.current) {
+      clearInterval(renewRef.current)
+      renewRef.current = null
+    }
+    if (formResourceRef.current) {
+      releaseLock(formResourceRef.current).catch(() => {})
+      formResourceRef.current = null
+    }
+    setForm(null)
+    setFormLocked(null)
+    setError('')
+    onFormChange?.(false)
+  }
+
+  useEffect(() => () => {
+    if (renewRef.current) clearInterval(renewRef.current)
+    if (formResourceRef.current) releaseLock(formResourceRef.current).catch(() => {})
+  }, [])
 
   const load = () => {
     setLoading(true)
@@ -39,7 +96,7 @@ export function EntityList({ api, columns, title, Form }) {
   useEffect(load, [])
 
   const handleDelete = async id => {
-    if (!confirm('¿Eliminar este registro?')) return
+    if (!confirm('¿Dar de baja este registro?')) return
     try {
       await api.delete(id)
       load()
@@ -50,10 +107,20 @@ export function EntityList({ api, columns, title, Form }) {
     try {
       if (data.id) await api.update(data.id, data)
       else await api.create(data)
-      setForm(null)
+      closeForm()
       load()
     } catch (e) { setError(e.message) }
   }
+
+  if (formLocked) return (
+    <div className="entity-form-page">
+      <h2>{title}</h2>
+      <div className="lock-notice">
+        <p>Este recurso está siendo editado por <strong>{formLocked.userName}</strong>.</p>
+        <button className="btn-secondary" onClick={() => setFormLocked(null)}>Volver</button>
+      </div>
+    </div>
+  )
 
   if (form) return (
     <EntityForm
@@ -61,7 +128,7 @@ export function EntityList({ api, columns, title, Form }) {
       fields={Form}
       initial={form}
       onSave={handleSave}
-      onCancel={() => { setForm(null); setError('') }}
+      onCancel={closeForm}
       error={error}
     />
   )
@@ -72,7 +139,7 @@ export function EntityList({ api, columns, title, Form }) {
         <div className="entity-header-left">
           <h2>{title}</h2>
         </div>
-        <button className="btn-primary" onClick={() => { setForm({}); setError('') }}>+ Nuevo</button>
+        <button className="btn-primary" onClick={() => openForm(defaults ? { ...defaults } : {})}>+ Nuevo</button>
       </header>
       {error && <div className="error">{error}</div>}
       {loading ? <div className="loading">Cargando...</div> : (
@@ -101,8 +168,8 @@ export function EntityList({ api, columns, title, Form }) {
                   return <td key={c.key}>{display ?? '-'}</td>
                 })}
                 <td className="actions">
-                  <button className="btn-sm" onClick={() => setForm(item)}>Editar</button>
-                  <button className="btn-sm danger" onClick={() => handleDelete(item.id)}>Eliminar</button>
+                  <button className="btn-sm" onClick={() => openForm(item)}>Editar</button>
+                  <button className="btn-sm danger" onClick={() => handleDelete(item.id)}>Dar de baja</button>
                 </td>
               </tr>
             ))}
@@ -114,7 +181,18 @@ export function EntityList({ api, columns, title, Form }) {
 }
 
 function EntityForm({ title, fields, initial, onSave, onCancel, error: serverError }) {
-  const [data, setData] = useState({ ...initial })
+  const [data, setData] = useState(() => {
+    const converted = {}
+    for (const key of Object.keys(initial)) {
+      const field = fields.find(f => f.key === key)
+      if (field?.type === 'select' && typeof initial[key] === 'number') {
+        converted[key] = String(initial[key])
+      } else {
+        converted[key] = initial[key]
+      }
+    }
+    return converted
+  })
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState('')
   const [showPw, setShowPw] = useState({})
@@ -177,7 +255,7 @@ function EntityForm({ title, fields, initial, onSave, onCancel, error: serverErr
           <label key={f.key}>
             <span>{f.label}</span>
             {f.type === 'select' ? (
-              <select value={data[f.key] || ''} onChange={e => handleChange(f.key, e.target.value)} required={f.required}>
+              <select value={data[f.key] || ''} onChange={e => handleChange(f.key, e.target.value)} required={f.required} disabled={f.readOnly}>
                 <option value="">Seleccionar...</option>
                 {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -190,6 +268,8 @@ function EntityForm({ title, fields, initial, onSave, onCancel, error: serverErr
                   </option>
                 ))}
               </select>
+            ) : f.type === 'date' ? (
+              <input type="date" value={data[f.key] || ''} onChange={e => handleChange(f.key, e.target.value)} required={f.required} />
             ) : f.type === 'number' ? (
               <input type="number" value={data[f.key] || ''} onChange={e => handleChange(f.key, +e.target.value)} required={f.required} />
             ) : f.type === 'password' ? (

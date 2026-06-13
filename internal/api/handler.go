@@ -13,7 +13,9 @@ type errorResponse struct {
 }
 
 type EntityAPI[T data.Entity] struct {
-	Store *data.GenericStore[T]
+	Store   *data.GenericStore[T]
+	Model   string
+	OnWrite func(action, model string, id int, data json.RawMessage)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -59,6 +61,10 @@ func (api *EntityAPI[T]) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
 		return
 	}
+	if api.OnWrite != nil {
+		d, _ := json.Marshal(item)
+		api.OnWrite("create", api.Model, item.GetID(), d)
+	}
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -89,6 +95,10 @@ func (api *EntityAPI[T]) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
 		return
 	}
+	if api.OnWrite != nil {
+		d, _ := json.Marshal(updated)
+		api.OnWrite("update", api.Model, id, d)
+	}
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -102,6 +112,9 @@ func (api *EntityAPI[T]) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := api.Store.Delete(id); err != nil {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: err.Error()})
 		return
+	}
+	if api.OnWrite != nil {
+		api.OnWrite("delete", api.Model, id, nil)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "deleted"})
 }

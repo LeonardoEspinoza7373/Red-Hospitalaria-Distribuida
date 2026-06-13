@@ -124,6 +124,28 @@ func (s *UserStore) Update(user *User) error {
 	return fmt.Errorf("user not found: id=%d", user.ID)
 }
 
+func (s *UserStore) SyncCreate(user *User) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.users = append(s.users, *user)
+	if user.ID >= s.nextID {
+		s.nextID = user.ID + 1
+	}
+	return s.Save()
+}
+
+func (s *UserStore) SyncUpdate(user *User) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.users {
+		if s.users[i].ID == user.ID {
+			s.users[i] = *user
+			return s.Save()
+		}
+	}
+	return fmt.Errorf("user not found: id=%d", user.ID)
+}
+
 func (s *UserStore) Delete(id int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

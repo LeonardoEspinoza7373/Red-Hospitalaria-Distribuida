@@ -12,6 +12,7 @@ import (
 
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/auth"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/data"
+	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/lock"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/node"
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/pkg/config"
 )
@@ -140,6 +141,8 @@ func main() {
 		os.Exit(1)
 	}
 	n.TrasplanteStore = trasplanteStore
+
+	n.LockManager = lock.NewLockManager(n.ID)
 
 	n.Start()
 

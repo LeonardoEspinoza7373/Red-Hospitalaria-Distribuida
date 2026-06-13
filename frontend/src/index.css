@@ -774,6 +774,13 @@ body {
 
 .entity-form select { cursor: pointer; }
 
+.entity-form input:disabled,
+.entity-form select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
 .form-actions { display: flex; gap: 0.7rem; margin-top: 1.5rem; }
 
 .password-wrapper { position: relative; display: flex; align-items: center; }
@@ -911,4 +918,24 @@ body {
   }
 
   .bully-card { padding: 1rem 1rem 0; }
+}
+
+/* ============================== LOCK NOTICE ============================== */
+.lock-notice {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  background: var(--color-elevated);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+}
+
+.lock-notice p {
+  font-size: 1rem;
+  color: var(--color-text);
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+.lock-notice p strong {
+  color: var(--color-life);
 }

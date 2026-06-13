@@ -144,10 +144,12 @@ function BullyToggle() {
 }
 
 export function Usuarios() {
+  const [formOpen, setFormOpen] = useState(false)
+
   return (
     <div>
-      <BullyToggle />
-      <EntityList api={usuariosAPI} columns={columns} title="Usuarios" Form={Form} />
+      {!formOpen && <BullyToggle />}
+      <EntityList api={usuariosAPI} columns={columns} title="Usuarios" Form={Form} onFormChange={setFormOpen} />
     </div>
   )
 }

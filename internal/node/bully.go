@@ -12,7 +12,7 @@ import (
 func (n *Node) startElection() {
 	n.mu.Lock()
 	if !n.BullyEnabled {
-		n.log.Warn("election blocked: bully algorithm disabled")
+		n.log.Warn("election blocked: bully algorithm disabled", "category", "bully")
 		n.mu.Unlock()
 		return
 	}
@@ -28,7 +28,7 @@ func (n *Node) startElection() {
 	seq := n.electionSeq
 	n.mu.Unlock()
 
-	n.log.Info("starting bully election", "seq", seq)
+	n.log.Info("starting bully election", "seq", seq, "category", "bully")
 
 	higherPeers := n.getHigherPeers()
 
@@ -42,7 +42,7 @@ func (n *Node) startElection() {
 		addr := peerAddr
 		go func() {
 			if err := transport.SendMessage(addr, msg); err != nil {
-				n.log.Warn("send ELECTION failed", "peer", addr, "error", err)
+				n.log.Warn("send ELECTION failed", "peer", addr, "error", err, "category", "bully")
 			}
 		}()
 	}
@@ -66,7 +66,7 @@ func (n *Node) handleElectionTimeout() {
 	n.mu.Unlock()
 
 	if !bullyEnabled {
-		n.log.Warn("election timed out but bully disabled - staying follower")
+		n.log.Warn("election timed out but bully disabled - staying follower", "category", "bully")
 		n.mu.Lock()
 		if n.State == Candidate {
 			n.State = Follower
@@ -78,9 +78,12 @@ func (n *Node) handleElectionTimeout() {
 
 	if gotOK {
 		n.log.Info("OK received during election, waiting for new coordinator")
+		n.mu.Lock()
+		n.State = Follower
+		n.mu.Unlock()
 		n.scheduleCoordinatorWatch()
 	} else {
-		n.log.Info("no OK received, becoming coordinator")
+		n.log.Info("no OK received, becoming coordinator", "category", "bully")
 		n.becomeCoordinator()
 	}
 }
@@ -108,7 +111,7 @@ func (n *Node) handleElection(fromID int, fromAddr string) {
 	if !ok {
 		host, _, err := net.SplitHostPort(fromAddr)
 		if err != nil {
-			n.log.Warn("cannot determine peer address for OK", "from_id", fromID, "error", err)
+			n.log.Warn("cannot determine peer address for OK", "from_id", fromID, "error", err, "category", "bully")
 			return
 		}
 		peerAddr = net.JoinHostPort(host, n.Port)
@@ -116,7 +119,7 @@ func (n *Node) handleElection(fromID int, fromAddr string) {
 
 	msg := protocol.NewMessage(protocol.OK, n.ID)
 	if err := transport.SendMessage(peerAddr, msg); err != nil {
-		n.log.Warn("send OK failed", "peer", peerAddr, "error", err)
+		n.log.Warn("send OK failed", "peer", peerAddr, "error", err, "category", "bully")
 	}
 
 	n.mu.Lock()
@@ -132,7 +135,7 @@ func (n *Node) handleOK(fromID int) {
 	n.mu.Lock()
 	if n.State == Candidate {
 		n.gotOK = true
-		n.log.Debug("received OK", "from", fromID)
+		n.log.Debug("received OK", "from", fromID, "category", "bully")
 	}
 	n.mu.Unlock()
 }
@@ -146,20 +149,19 @@ func (n *Node) becomeCoordinator() {
 	if !n.BullyEnabled {
 		n.State = Follower
 		n.mu.Unlock()
-		n.log.Warn("coordinator promotion blocked: bully algorithm disabled")
+		n.log.Warn("coordinator promotion blocked: bully algorithm disabled", "category", "bully")
 		return
 	}
 	n.State = Coordinator
 	n.CoordinatorID = n.ID
 	n.mu.Unlock()
 
-	n.log.Info("became coordinator", "node_id", n.ID)
+	n.log.Info("became coordinator", "node_id", n.ID, "category", "bully")
 
 	msg := protocol.NewCoordinatorMessage(n.ID)
 	n.broadcast(msg)
 
 	n.startHeartbeats()
-	n.startHTTPServer()
 }
 
 func (n *Node) handleCoordinator(coordID int) {
@@ -178,11 +180,11 @@ func (n *Node) handleCoordinator(coordID int) {
 		n.State = Follower
 		n.mu.Unlock()
 
-		n.log.Info("accepting new coordinator", "coordinator_id", coordID)
-		n.stopHTTPServer()
+		n.log.Info("accepting new coordinator", "coordinator_id", coordID, "category", "bully")
 		n.resetHeartbeatWatch()
+		n.scheduleTimeSync()
 	} else if coordID < n.ID && currentState == Coordinator {
-		n.log.Warn("lower-ID node claims coordinator, asserting myself")
+		n.log.Warn("lower-ID node claims coordinator, asserting myself", "category", "bully")
 		n.broadcast(protocol.NewCoordinatorMessage(n.ID))
 	}
 }

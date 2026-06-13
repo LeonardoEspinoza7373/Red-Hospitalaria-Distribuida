@@ -1,5 +1,13 @@
 import { useState, useEffect } from 'react'
 import { trasplantesAPI, pacientesAPI, organosAPI, organosCompatibles } from '../api'
+import { useAuth } from '../AuthContext'
+
+const hospitals = {
+  1: 'Hospital Loja',
+  2: 'Hospital Cuenca',
+  3: 'Hospital Quito',
+  4: 'Hospital Guayaquil',
+}
 
 const estados = [
   { value: 'PENDIENTE', label: 'Pendiente' },
@@ -9,6 +17,7 @@ const estados = [
 ]
 
 export function Trasplantes() {
+  const { user } = useAuth()
   const [items, setItems] = useState([])
   const [pacientes, setPacientes] = useState([])
   const [organos, setOrganos] = useState([])
@@ -23,6 +32,7 @@ export function Trasplantes() {
   const [organoId, setOrganoId] = useState('')
   const [fecha, setFecha] = useState('')
   const [estado, setEstado] = useState('')
+  const [hospitalId, setHospitalId] = useState(String(user?.hospital_id || ''))
   const [busy, setBusy] = useState(false)
 
   const load = () => {
@@ -51,7 +61,7 @@ export function Trasplantes() {
     e.preventDefault()
     setBusy(true)
     try {
-      const data = { paciente_id: +pacienteId, organo_id: +organoId, fecha, estado }
+      const data = { paciente_id: +pacienteId, organo_id: +organoId, fecha, estado, hospital_id: +hospitalId }
       if (editing) await trasplantesAPI.update(editing.id, data)
       else await trasplantesAPI.create(data)
       cancelForm()
@@ -66,6 +76,7 @@ export function Trasplantes() {
     setOrganoId(String(item.organo_id))
     setFecha(item.fecha)
     setEstado(item.estado)
+    setHospitalId(String(item.hospital_id || user?.hospital_id || ''))
     setForm(true)
     setError('')
     organosCompatibles(item.paciente_id)
@@ -80,11 +91,12 @@ export function Trasplantes() {
     setOrganoId('')
     setFecha('')
     setEstado('')
+    setHospitalId(String(user?.hospital_id || ''))
     setError('')
   }
 
   const handleDelete = async id => {
-    if (!confirm('¿Eliminar este registro?')) return
+    if (!confirm('¿Dar de baja este registro?')) return
     try {
       await trasplantesAPI.delete(id)
       load()
@@ -124,13 +136,22 @@ export function Trasplantes() {
         </label>
         <label>
           <span>Fecha</span>
-          <input type="text" value={fecha} onChange={e => setFecha(e.target.value)} required placeholder="YYYY-MM-DD" />
+          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} required />
         </label>
         <label>
           <span>Estado</span>
           <select value={estado} onChange={e => setEstado(e.target.value)} required>
             <option value="">Seleccionar...</option>
             {estados.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Hospital</span>
+          <select value={hospitalId} onChange={e => setHospitalId(e.target.value)} required>
+            <option value="">Seleccionar hospital...</option>
+            {Object.entries(hospitals).map(([id, name]) => (
+              <option key={id} value={id}>{name}</option>
+            ))}
           </select>
         </label>
         <div className="form-actions">
@@ -149,7 +170,7 @@ export function Trasplantes() {
         <div className="entity-header-left">
           <h2>Trasplantes</h2>
         </div>
-        <button className="btn-primary" onClick={() => { setEditing(null); setForm(true); setError(''); setPacienteId(''); setOrganoId(''); setFecha(''); setEstado(''); setCompatibles([]) }}>+ Nuevo</button>
+        <button className="btn-primary" onClick={() => { setEditing(null); setForm(true); setError(''); setPacienteId(''); setOrganoId(''); setFecha(''); setEstado(''); setHospitalId(String(user?.hospital_id || '')); setCompatibles([]) }}>+ Nuevo</button>
       </header>
       {error && <div className="error">{error}</div>}
       {loading ? <div className="loading">Cargando...</div> : (
@@ -160,12 +181,13 @@ export function Trasplantes() {
               <th>Órgano</th>
               <th>Fecha</th>
               <th>Estado</th>
+              <th>Hospital</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
-              <tr><td colSpan="5" className="empty">Sin registros</td></tr>
+              <tr><td colSpan="6" className="empty">Sin registros</td></tr>
             )}
             {items.map(item => (
               <tr key={item.id}>
@@ -173,9 +195,10 @@ export function Trasplantes() {
                 <td>{organoTipo(item.organo_id)}</td>
                 <td>{item.fecha}</td>
                 <td>{item.estado}</td>
+                <td>{hospitals[item.hospital_id] || '—'}</td>
                 <td className="actions">
                   <button className="btn-sm" onClick={() => openEdit(item)}>Editar</button>
-                  <button className="btn-sm danger" onClick={() => handleDelete(item.id)}>Eliminar</button>
+                  <button className="btn-sm danger" onClick={() => handleDelete(item.id)}>Dar de baja</button>
                 </td>
               </tr>
             ))}

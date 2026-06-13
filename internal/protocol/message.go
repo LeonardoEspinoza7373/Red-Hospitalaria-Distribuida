@@ -11,6 +11,7 @@ type MessageType string
 type LogEntry struct {
 	NodeID    int    `json:"node_id"`
 	Level     string `json:"level"`
+	Category  string `json:"category"`
 	Message   string `json:"message"`
 	Timestamp int64  `json:"timestamp"`
 }
@@ -21,14 +22,23 @@ const (
 	OK          MessageType = "OK"
 	Coordinator MessageType = "COORDINATOR"
 	LogEvent    MessageType = "LOG_EVENT"
+	SyncEvent   MessageType = "SYNC_EVENT"
 )
 
+type SyncPayload struct {
+	Model  string          `json:"model"`
+	Action string          `json:"action"`
+	ID     int             `json:"id,omitempty"`
+	Data   json.RawMessage `json:"data,omitempty"`
+}
+
 type Message struct {
-	Type          MessageType `json:"type"`
-	NodeID        int         `json:"node_id"`
-	CoordinatorID int         `json:"coordinator_id,omitempty"`
-	Timestamp     int64       `json:"timestamp"`
-	LogData       *LogEntry   `json:"log_data,omitempty"`
+	Type          MessageType  `json:"type"`
+	NodeID        int          `json:"node_id"`
+	CoordinatorID int          `json:"coordinator_id,omitempty"`
+	Timestamp     int64        `json:"timestamp"`
+	LogData       *LogEntry    `json:"log_data,omitempty"`
+	SyncPayload   *SyncPayload `json:"sync_payload,omitempty"`
 }
 
 func NewMessage(msgType MessageType, nodeID int) Message {

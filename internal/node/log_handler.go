@@ -24,9 +24,19 @@ func (h *CaptureHandler) Handle(ctx context.Context, r slog.Record) error {
 	entry := protocol.LogEntry{
 		NodeID:    h.node.ID,
 		Level:     r.Level.String(),
-		Message:   r.Message,
 		Timestamp: r.Time.Unix(),
 	}
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == "category" {
+			entry.Category = a.Value.String()
+			return false
+		}
+		return true
+	})
+	if entry.Category == "" {
+		entry.Category = "system"
+	}
+	entry.Message = r.Message
 	h.node.captureLog(entry)
 	return h.inner.Handle(ctx, r)
 }

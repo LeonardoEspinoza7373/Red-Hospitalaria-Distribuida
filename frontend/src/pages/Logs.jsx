@@ -9,6 +9,7 @@ const hospitals = {
 }
 
 const levels = ['', 'DEBUG', 'INFO', 'WARN', 'ERROR']
+const categories = ['', 'bully', 'api', 'system']
 
 const levelColors = {
   DEBUG: 'var(--muted)',
@@ -26,12 +27,13 @@ export function Logs() {
   const [logs, setLogs] = useState([])
   const [filterNode, setFilterNode] = useState('')
   const [filterLevel, setFilterLevel] = useState('')
+  const [filterCategory, setFilterCategory] = useState('')
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await fetchLogs({ node_id: filterNode, level: filterLevel })
+      const data = await fetchLogs({ node_id: filterNode, level: filterLevel, category: filterCategory })
       setLogs(Array.isArray(data) ? data.reverse() : [])
     } catch {
       // ignore
@@ -66,6 +68,12 @@ export function Logs() {
           ))}
         </select>
 
+        <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+          {categories.map(c => (
+            <option key={c} value={c}>{c || 'Todas las categorías'}</option>
+          ))}
+        </select>
+
         <button className="btn-primary" onClick={load} disabled={loading}>
           {loading ? 'Cargando...' : 'Actualizar'}
         </button>
@@ -78,13 +86,14 @@ export function Logs() {
               <th>Hora</th>
               <th>Nodo</th>
               <th>Nivel</th>
+              <th>Categoría</th>
               <th>Mensaje</th>
             </tr>
           </thead>
           <tbody>
             {logs.length === 0 && (
               <tr>
-                <td colSpan={4} className="empty">Sin registros</td>
+                <td colSpan={5} className="empty">Sin registros</td>
               </tr>
             )}
             {logs.map((log, i) => (
@@ -96,6 +105,7 @@ export function Logs() {
                     {log.level}
                   </span>
                 </td>
+                <td><span className="log-category">{log.category || '-'}</span></td>
                 <td className="log-message">{log.message}</td>
               </tr>
             ))}

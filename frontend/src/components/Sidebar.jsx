@@ -3,7 +3,7 @@ import { useAuth } from '../AuthContext'
 import { IconHome, IconUser, IconHeart, IconActivity, IconClipboard, IconSwap, IconSettings, IconTerminal, IconLogOut } from '../icons'
 
 const links = [
-  { to: '/', icon: IconHome, label: 'Dashboard' },
+  { to: '/', icon: IconHome, label: 'Panel de Control' },
   { to: '/pacientes', icon: IconUser, label: 'Pacientes' },
   { to: '/donantes', icon: IconHeart, label: 'Donantes' },
   { to: '/organos', icon: IconActivity, label: 'Órganos' },
@@ -12,7 +12,7 @@ const links = [
 ]
 
 const adminLinks = [
-  { to: '/usuarios', icon: IconSettings, label: 'Usuarios' },
+  { to: '/usuarios', icon: IconSettings, label: 'Administración' },
   { to: '/logs', icon: IconTerminal, label: 'Logs' },
 ]
 

@@ -17,7 +17,7 @@ func (n *Node) startHeartbeats() {
 	n.heartbeatCancel = cancel
 	n.mu.Unlock()
 
-	n.log.Info("starting heartbeat sender")
+	n.log.Info("starting heartbeat sender", "category", "system")
 
 	go func() {
 		ticker := time.NewTicker(config.HeartbeatInterval)
@@ -40,7 +40,7 @@ func (n *Node) startHeartbeats() {
 
 				msg := protocol.NewHeartbeatMessage(myID, coordID)
 				n.broadcast(msg)
-				n.log.Debug("sent HEARTBEAT")
+				n.log.Debug("sent HEARTBEAT", "category", "heartbeat")
 			}
 		}
 	}()
@@ -71,7 +71,7 @@ func (n *Node) handleHeartbeat(fromID, coordID int) {
 
 	if isCoord && coordID != myID {
 		if myID > coordID {
-			n.log.Warn("detected lower-ID coordinator, asserting dominance")
+			n.log.Warn("detected lower-ID coordinator, asserting dominance", "category", "bully")
 			n.broadcast(protocol.NewCoordinatorMessage(myID))
 			return
 		}
@@ -79,8 +79,7 @@ func (n *Node) handleHeartbeat(fromID, coordID int) {
 		n.State = Follower
 		n.CoordinatorID = coordID
 		n.mu.Unlock()
-		n.log.Info("stepping down for higher-ID coordinator", "new_coord", coordID)
-		n.stopHTTPServer()
+		n.log.Info("stepping down for higher-ID coordinator", "new_coord", coordID, "category", "bully")
 		n.resetHeartbeatWatch()
 		return
 	}
@@ -90,10 +89,10 @@ func (n *Node) handleHeartbeat(fromID, coordID int) {
 		enabled := n.BullyEnabled
 		n.mu.Unlock()
 		if enabled {
-			n.log.Info("detected lower-ID coordinator, starting election")
+			n.log.Info("detected lower-ID coordinator, starting election", "category", "bully")
 			n.startElection()
 		} else {
-			n.log.Warn("detected lower-ID coordinator but bully disabled, ignoring")
+			n.log.Warn("detected lower-ID coordinator but bully disabled, ignoring", "category", "bully")
 		}
 		return
 	}
@@ -102,7 +101,7 @@ func (n *Node) handleHeartbeat(fromID, coordID int) {
 		n.mu.Lock()
 		n.CoordinatorID = coordID
 		n.mu.Unlock()
-		n.log.Info("coordinator updated", "new_coord", coordID)
+		n.log.Info("coordinator updated", "new_coord", coordID, "category", "bully")
 	}
 
 	n.resetHeartbeatWatch()
@@ -117,10 +116,10 @@ func (n *Node) handleHeartbeatWatchTimeout() {
 	bullyEnabled := n.BullyEnabled
 	n.mu.Unlock()
 
-	n.log.Warn("heartbeat timeout - coordinator may be down")
+	n.log.Warn("heartbeat timeout - coordinator may be down", "category", "bully")
 	if bullyEnabled {
 		n.startElection()
 	} else {
-		n.log.Warn("bully algorithm disabled - not starting election, proxy will return 503")
+		n.log.Warn("bully algorithm disabled - not starting election, proxy will return 503", "category", "bully")
 	}
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { organosAPI, donantesAPI } from '../api'
+import { useAuth } from '../AuthContext'
 
 const tiposOrgano = [
   { value: 'CORAZON', label: 'Corazón' },
@@ -12,7 +13,15 @@ const tiposOrgano = [
   { value: 'MEDULA_OSEA', label: 'Médula Ósea' },
 ]
 
+const hospitals = {
+  1: 'Hospital Loja',
+  2: 'Hospital Cuenca',
+  3: 'Hospital Quito',
+  4: 'Hospital Guayaquil',
+}
+
 export function Donaciones() {
+  const { user } = useAuth()
   const [extractions, setExtractions] = useState([])
   const [donantes, setDonantes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -21,6 +30,7 @@ export function Donaciones() {
   const [donanteId, setDonanteId] = useState('')
   const [tipo, setTipo] = useState('')
   const [compatibilidad, setCompatibilidad] = useState('')
+  const [hospitalId, setHospitalId] = useState(String(user?.hospital_id || ''))
   const [busy, setBusy] = useState(false)
 
   const load = () => {
@@ -37,11 +47,12 @@ export function Donaciones() {
     e.preventDefault()
     setBusy(true)
     try {
-      await organosAPI.create({ tipo, compatibilidad, estado: 'DISPONIBLE', donante_id: +donanteId })
+      await organosAPI.create({ tipo, compatibilidad, estado: 'DISPONIBLE', donante_id: +donanteId, hospital_id: +hospitalId })
       setForm(false)
       setTipo('')
       setCompatibilidad('')
       setDonanteId('')
+      setHospitalId(String(user?.hospital_id || ''))
       load()
     } catch (e) { setError(e.message) }
     setBusy(false)
@@ -74,6 +85,15 @@ export function Donaciones() {
           <span>Compatibilidad</span>
           <input type="text" value={compatibilidad} onChange={e => setCompatibilidad(e.target.value)} required placeholder="Se asigna del donante" readOnly />
         </label>
+        <label>
+          <span>Hospital</span>
+          <select value={hospitalId} onChange={e => setHospitalId(e.target.value)} required>
+            <option value="">Seleccionar hospital...</option>
+            {Object.entries(hospitals).map(([id, name]) => (
+              <option key={id} value={id}>{name}</option>
+            ))}
+          </select>
+        </label>
         <div className="form-actions">
           <button type="submit" className="btn-primary" disabled={busy}>{busy ? 'Registrando...' : 'Registrar Extracción'}</button>
           <button type="button" className="btn-secondary" onClick={() => setForm(false)}>Cancelar</button>
@@ -97,11 +117,12 @@ export function Donaciones() {
               <th>Tipo</th>
               <th>Compatibilidad</th>
               <th>Estado</th>
+              <th>Hospital</th>
             </tr>
           </thead>
           <tbody>
             {extractions.length === 0 && (
-              <tr><td colSpan="4" className="empty">Sin registros</td></tr>
+              <tr><td colSpan="5" className="empty">Sin registros</td></tr>
             )}
             {extractions.map(org => {
               const donante = donantes.find(d => d.id === org.donante_id)
@@ -111,6 +132,7 @@ export function Donaciones() {
                   <td>{tiposOrgano.find(t => t.value === org.tipo)?.label || org.tipo}</td>
                   <td>{org.compatibilidad}</td>
                   <td>{org.estado === 'DISPONIBLE' ? <span className="status-available">Disponible</span> : <span className="status-unavailable">No Disponible</span>}</td>
+                  <td>{hospitals[org.hospital_id] || '—'}</td>
                 </tr>
               )
             })}

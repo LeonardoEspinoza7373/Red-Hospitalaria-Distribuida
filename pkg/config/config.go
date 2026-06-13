@@ -27,4 +27,5 @@ var (
 	HeartbeatTimeout  = 15 * time.Second
 	ElectionTimeout   = 3 * time.Second
 	StartupDelay      = 200 * time.Millisecond
+	TimeSyncInterval  = 1 * time.Hour
 )

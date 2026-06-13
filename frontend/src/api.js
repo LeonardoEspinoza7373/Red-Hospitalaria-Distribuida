@@ -67,10 +67,29 @@ export function organosCompatibles(pacienteId) {
   return apiFetch(`${BASE}/api/organos/compatibles?paciente_id=${pacienteId}`)
 }
 
+export async function acquireLock(resource, ttl) {
+  return apiFetch('/api/lock', {
+    method: 'POST',
+    body: JSON.stringify({ resource, ttl }),
+  })
+}
+
+export async function releaseLock(resource) {
+  return apiFetch('/api/unlock', {
+    method: 'POST',
+    body: JSON.stringify({ resource }),
+  })
+}
+
+export async function listLocks() {
+  return apiFetch('/api/locks')
+}
+
 export function fetchLogs(filters = {}) {
   const params = new URLSearchParams()
   if (filters.node_id) params.set('node_id', filters.node_id)
   if (filters.level) params.set('level', filters.level)
+  if (filters.category) params.set('category', filters.category)
   const qs = params.toString()
   return apiFetch(`${BASE}/api/admin/logs${qs ? '?' + qs : ''}`)
 }

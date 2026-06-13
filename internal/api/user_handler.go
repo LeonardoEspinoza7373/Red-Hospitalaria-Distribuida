@@ -10,7 +10,8 @@ import (
 )
 
 type UserAPI struct {
-	Store *data.UserStore
+	Store   *data.UserStore
+	OnWrite func(action, model string, id int, data json.RawMessage)
 }
 
 type userResponse struct {
@@ -106,6 +107,10 @@ func (api *UserAPI) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
 		return
 	}
+	if api.OnWrite != nil {
+		d, _ := json.Marshal(user)
+		api.OnWrite("create", "usuario", user.ID, d)
+	}
 	writeJSON(w, http.StatusCreated, toUserResponse(user))
 }
 
@@ -141,6 +146,10 @@ func (api *UserAPI) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: err.Error()})
 		return
 	}
+	if api.OnWrite != nil {
+		d, _ := json.Marshal(existing)
+		api.OnWrite("update", "usuario", id, d)
+	}
 	writeJSON(w, http.StatusOK, toUserResponse(existing))
 }
 
@@ -160,6 +169,9 @@ func (api *UserAPI) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := api.Store.Delete(id); err != nil {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: err.Error()})
 		return
+	}
+	if api.OnWrite != nil {
+		api.OnWrite("delete", "usuario", id, nil)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "deleted"})
 }
