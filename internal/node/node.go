@@ -185,6 +185,7 @@ func (n *Node) Start() {
 
 	n.startHTTPServer()
 	n.startPeriodicTimeSync()
+	n.startCoordinatorWatchdog()
 }
 
 func (n *Node) Stop() {
@@ -396,6 +397,30 @@ func (n *Node) handleStartupElection() {
 		n.log.Info("no coordinator found on startup, starting election", "category", "bully")
 		n.startElection()
 	}
+}
+
+func (n *Node) startCoordinatorWatchdog() {
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-n.ctx.Done():
+				return
+			case <-ticker.C:
+				n.mu.Lock()
+				noCoord := n.CoordinatorID == 0
+				n.mu.Unlock()
+				if noCoord {
+					n.log.Warn("no coordinator after startup, retrying election", "category", "bully")
+					select {
+					case n.events <- Event{Type: StartupElection}:
+					case <-n.ctx.Done():
+					}
+				}
+			}
+		}
+	}()
 }
 
 func (n *Node) captureLog(entry protocol.LogEntry) {
