@@ -23,9 +23,13 @@ var IDToIP = map[int]string{
 }
 
 var (
-	HeartbeatInterval = 5 * time.Second
-	HeartbeatTimeout  = 15 * time.Second
-	ElectionTimeout   = 3 * time.Second
-	StartupDelay      = 200 * time.Millisecond
-	TimeSyncInterval  = 1 * time.Hour
+	HeartbeatInterval    = 5 * time.Second
+	HeartbeatTimeout     = 15 * time.Second
+	ElectionTimeoutBase  = 2 * time.Second
+	ElectionTimeoutJitter = 2 * time.Second
+	DiscoveryTimeoutBase  = 1 * time.Second
+	DiscoveryTimeoutJitter = 2 * time.Second
+	HeartbeatJitter      = 0.2
+	StartupDelayMax      = 3 * time.Second
+	TimeSyncInterval     = 1 * time.Hour
 )

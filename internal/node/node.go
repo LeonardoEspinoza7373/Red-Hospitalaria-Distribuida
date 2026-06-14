@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,10 +26,26 @@ import (
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/pkg/config"
 )
 
+func stateString(s NodeState) string {
+	switch s {
+	case Follower:
+		return "FOLLOWER"
+	case Discovering:
+		return "DISCOVERING"
+	case Candidate:
+		return "CANDIDATE"
+	case Coordinator:
+		return "COORDINATOR"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 type NodeState int
 
 const (
 	Follower    NodeState = iota
+	Discovering
 	Candidate
 	Coordinator
 )
@@ -39,6 +57,9 @@ const (
 	HeartbeatWatchTimeout
 	ElectionResponseTimeout
 	StartupElection
+	StartupDiscovery
+	DiscoveryTimeout
+	HeartbeatTick
 )
 
 type Event struct {
@@ -65,8 +86,10 @@ type Node struct {
 	log                 *slog.Logger
 
 	heartbeatWatchTimer *time.Timer
-	heartbeatCancel     context.CancelFunc
+	discoveryTimer      *time.Timer
+	electionTimer       *time.Timer
 	electionSeq         int64
+	currentElectionID   int64
 
 	httpServer     *http.Server
 	httpAddr       string // empty = do not start HTTP server
@@ -85,8 +108,11 @@ type Node struct {
 	BullyEnabled bool
 	LockManager  *lock.LockManager
 
-	timeOffset   time.Duration
-	timeSyncMu   sync.Mutex
+	timeOffset     time.Duration
+	timeSyncMu     sync.Mutex
+
+	currentEpoch   int
+	lastHeartbeatAt time.Time
 }
 
 func New(ip string) *Node {
@@ -152,8 +178,8 @@ func (n *Node) IsBullyEnabled() bool {
 
 func (n *Node) SetBullyEnabled(enabled bool) {
 	n.mu.Lock()
-	defer n.mu.Unlock()
 	n.BullyEnabled = enabled
+	n.mu.Unlock()
 	n.log.Info("bully algorithm toggled", "enabled", enabled, "category", "bully")
 	if enabled {
 		// Force an immediate election check
@@ -181,11 +207,10 @@ func (n *Node) Start() {
 
 	go n.eventLoop()
 	go n.logWorker()
-	go n.scheduleStartupElection()
+	go n.scheduleStartupDiscovery()
 
 	n.startHTTPServer()
 	n.startPeriodicTimeSync()
-	n.startCoordinatorWatchdog()
 }
 
 func (n *Node) Stop() {
@@ -194,11 +219,12 @@ func (n *Node) Stop() {
 	if n.heartbeatWatchTimer != nil {
 		n.heartbeatWatchTimer.Stop()
 	}
-	n.mu.Lock()
-	if n.heartbeatCancel != nil {
-		n.heartbeatCancel()
+	if n.discoveryTimer != nil {
+		n.discoveryTimer.Stop()
 	}
-	n.mu.Unlock()
+	if n.electionTimer != nil {
+		n.electionTimer.Stop()
+	}
 	n.stopHTTPServer()
 	if n.LockManager != nil {
 		n.LockManager.Stop()
@@ -269,16 +295,14 @@ func (n *Node) timeSyncHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (n *Node) scheduleTimeSync() {
-	n.log.Info("scheduling initial time sync", "category", "system")
-	time.AfterFunc(2*time.Second, func() {
-		n.syncWithCoordinator()
-	})
-}
-
 func (n *Node) startPeriodicTimeSync() {
 	n.log.Info("starting periodic time sync", "interval", config.TimeSyncInterval, "category", "system")
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				n.log.Error("TIMESYNC_PANIC", "recover", r, "stack", string(debug.Stack()), "category", "system")
+			}
+		}()
 		ticker := time.NewTicker(config.TimeSyncInterval)
 		defer ticker.Stop()
 		for {
@@ -300,14 +324,37 @@ func (n *Node) onMessage(msg protocol.Message, addr net.Addr) {
 }
 
 func (n *Node) eventLoop() {
+	statusTicker := time.NewTicker(10 * time.Second)
+	defer statusTicker.Stop()
 	for {
-		select {
-		case <-n.ctx.Done():
+		if !n.eventLoopIteration(statusTicker) {
 			return
-		case evt := <-n.events:
-			n.handleEvent(evt)
 		}
 	}
+}
+
+func (n *Node) eventLoopIteration(st *time.Ticker) bool {
+	defer func() {
+		if r := recover(); r != nil {
+			n.log.Error("EVENT_LOOP_PANIC", "recover", r, "stack", string(debug.Stack()), "category", "system")
+		}
+	}()
+	select {
+	case <-n.ctx.Done():
+		return false
+	case <-st.C:
+		n.mu.Lock()
+		s := n.State
+		c := n.CoordinatorID
+		e := n.currentEpoch
+		h := time.Since(n.lastHeartbeatAt).String()
+		g := n.gotOK
+		n.mu.Unlock()
+		n.log.Warn("STATUS", "state", stateString(s), "coord", c, "epoch", e, "last_hb_ago", h, "gotOK", g, "category", "system")
+	case evt := <-n.events:
+		n.handleEvent(evt)
+	}
+	return true
 }
 
 func (n *Node) handleEvent(evt Event) {
@@ -322,105 +369,83 @@ func (n *Node) handleEvent(evt Event) {
 		n.handleElectionTimeout()
 	case StartupElection:
 		n.handleStartupElection()
+	case StartupDiscovery:
+		n.handleStartupDiscovery()
+	case DiscoveryTimeout:
+		n.handleDiscoveryTimeout()
+	case HeartbeatTick:
+		n.handleHeartbeatTick()
 	}
 }
 
 func (n *Node) dispatchMessage(msg protocol.Message, fromAddr string) {
 	switch msg.Type {
 	case protocol.Heartbeat:
-		n.log.Debug("recv HEARTBEAT", "category", "heartbeat", "from", msg.NodeID, "coord", msg.CoordinatorID)
-		n.handleHeartbeat(msg.NodeID, msg.CoordinatorID)
+		n.log.Debug("recv HEARTBEAT", "category", "heartbeat", "from", msg.NodeID, "coord", msg.CoordinatorID, "epoch", msg.Epoch)
+		n.handleHeartbeatMsg(msg.NodeID, msg.CoordinatorID, msg.Epoch)
 	case protocol.Election:
-		n.log.Debug("recv ELECTION", "category", "bully", "from", msg.NodeID)
-		n.handleElection(msg.NodeID, fromAddr)
+		n.log.Debug("recv ELECTION", "category", "bully", "from", msg.NodeID, "epoch", msg.Epoch, "election_id", msg.ElectionID)
+		n.handleElectionMsg(msg.NodeID, fromAddr, msg.Epoch, msg.ElectionID)
 	case protocol.OK:
-		n.log.Debug("recv OK", "category", "bully", "from", msg.NodeID)
-		n.handleOK(msg.NodeID)
+		n.log.Debug("recv OK", "category", "bully", "from", msg.NodeID, "epoch", msg.Epoch, "election_id", msg.ElectionID)
+		n.handleOKMsg(msg.NodeID, msg.Epoch, msg.ElectionID)
 	case protocol.Coordinator:
-		n.log.Info("recv COORDINATOR", "category", "bully", "from", msg.NodeID)
-		n.handleCoordinator(msg.NodeID)
+		n.log.Info("recv COORDINATOR", "category", "bully", "from", msg.NodeID, "epoch", msg.Epoch)
+		n.handleCoordinatorMsg(msg.NodeID, msg.Epoch)
+	case protocol.CoordinatorQuery:
+		n.log.Debug("recv COORDINATOR_QUERY", "category", "bully", "from", msg.NodeID)
+		n.handleCoordinatorQuery(msg.NodeID, fromAddr, msg.Epoch)
+	case protocol.CoordinatorAck:
+		n.log.Debug("recv COORDINATOR_ACK", "category", "bully", "from", msg.NodeID, "coord", msg.CoordinatorID, "epoch", msg.Epoch)
+		n.handleCoordinatorAck(msg.NodeID, msg.CoordinatorID, msg.Epoch)
 	case protocol.LogEvent:
 		if n.State == Coordinator && msg.LogData != nil {
 			n.logBuffer.Add(*msg.LogData)
 		}
 	case protocol.SyncEvent:
 		if msg.SyncPayload != nil {
-			n.handleSyncEvent(msg.NodeID, msg.SyncPayload)
+			n.handleSyncEvent(msg.NodeID, msg.SyncPayload, msg.Epoch)
 		}
 	}
 }
 
-func (n *Node) getHigherPeers() []string {
-	var higher []string
-	for peerID, addr := range n.Peers {
-		if peerID > n.ID {
-			higher = append(higher, addr)
+func (n *Node) safeSend(addr string, msg protocol.Message) {
+	defer func() {
+		if r := recover(); r != nil {
+			n.log.Error("SEND_PANIC", "peer", addr, "recover", r, "stack", string(debug.Stack()))
 		}
+	}()
+	if err := transport.SendMessage(addr, msg); err != nil {
+		n.log.Warn("send failed", "peer", addr, "error", err)
 	}
-	return higher
 }
 
 func (n *Node) broadcast(msg protocol.Message) {
 	for _, addr := range n.Peers {
 		peerAddr := addr
-		go func() {
-			if err := transport.SendMessage(peerAddr, msg); err != nil {
-				n.log.Warn("broadcast failed", "peer", peerAddr, "error", err, "category", "bully")
-			}
-		}()
+		go n.safeSend(peerAddr, msg)
 	}
 	if n.ProxyAddr != "" {
-		go func() {
-			if err := transport.SendMessage(n.ProxyAddr, msg); err != nil {
-				n.log.Debug("proxy send failed", "proxy", n.ProxyAddr, "error", err)
-			}
-		}()
+		go n.safeSend(n.ProxyAddr, msg)
 	}
 }
 
-func (n *Node) scheduleStartupElection() {
-	delay := time.Duration(n.ID) * config.StartupDelay
+func (n *Node) scheduleStartupDiscovery() {
+	delay := time.Duration(rand.Int63n(int64(config.StartupDelayMax)))
 	time.Sleep(delay)
 
 	select {
-	case n.events <- Event{Type: StartupElection}:
+	case n.events <- Event{Type: StartupDiscovery}:
 	case <-n.ctx.Done():
 	}
 }
 
-func (n *Node) handleStartupElection() {
-	n.mu.Lock()
-	hasCoordinator := n.CoordinatorID != 0
-	n.mu.Unlock()
-
-	if !hasCoordinator {
-		n.log.Info("no coordinator found on startup, starting election", "category", "bully")
-		n.startElection()
+// randomTimeout returns base + random[0, jitter).
+func randomTimeout(base, jitter time.Duration) time.Duration {
+	if jitter <= 0 || base <= 0 {
+		return base
 	}
-}
-
-func (n *Node) startCoordinatorWatchdog() {
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-n.ctx.Done():
-				return
-			case <-ticker.C:
-				n.mu.Lock()
-				noCoord := n.CoordinatorID == 0
-				n.mu.Unlock()
-				if noCoord {
-					n.log.Warn("no coordinator after startup, retrying election", "category", "bully")
-					select {
-					case n.events <- Event{Type: StartupElection}:
-					case <-n.ctx.Done():
-					}
-				}
-			}
-		}
-	}()
+	return base + time.Duration(rand.Int63n(int64(jitter)))
 }
 
 func (n *Node) captureLog(entry protocol.LogEntry) {
@@ -444,6 +469,11 @@ func (n *Node) captureLog(entry protocol.LogEntry) {
 }
 
 func (n *Node) logWorker() {
+	defer func() {
+		if r := recover(); r != nil {
+			n.log.Error("LOGWORKER_PANIC", "recover", r, "stack", string(debug.Stack()), "category", "system")
+		}
+	}()
 	for {
 		select {
 		case <-n.ctx.Done():
@@ -712,6 +742,7 @@ func (n *Node) syncCallback() func(action, model string, id int, data json.RawMe
 		n.mu.Lock()
 		coordID := n.CoordinatorID
 		isCoord := n.State == Coordinator
+		epoch := n.currentEpoch
 		n.mu.Unlock()
 		if !isCoord || coordID != n.ID {
 			return
@@ -721,28 +752,36 @@ func (n *Node) syncCallback() func(action, model string, id int, data json.RawMe
 			Action: action,
 			ID:     id,
 			Data:   data,
-		})
+		}, epoch)
 	}
 }
 
-func (n *Node) broadcastSync(payload *protocol.SyncPayload) {
+func (n *Node) broadcastSync(payload *protocol.SyncPayload, epoch int) {
 	msg := protocol.Message{
 		Type:        protocol.SyncEvent,
 		NodeID:      n.ID,
 		Timestamp:   time.Now().Unix(),
+		Epoch:       epoch,
 		SyncPayload: payload,
 	}
 	for _, addr := range n.Peers {
 		peerAddr := addr
-		go func() {
-			if err := transport.SendMessage(peerAddr, msg); err != nil {
-				n.log.Warn("sync broadcast failed", "peer", peerAddr, "error", err)
-			}
-		}()
+		go n.safeSend(peerAddr, msg)
 	}
 }
 
-func (n *Node) handleSyncEvent(fromID int, payload *protocol.SyncPayload) {
+func (n *Node) handleSyncEvent(fromID int, payload *protocol.SyncPayload, msgEpoch int) {
+	n.mu.Lock()
+	if msgEpoch > 0 && msgEpoch < n.currentEpoch {
+		n.mu.Unlock()
+		n.log.Warn("rejecting stale SYNC_EVENT", "from", fromID, "msg_epoch", msgEpoch, "current_epoch", n.currentEpoch)
+		return
+	}
+	if msgEpoch > n.currentEpoch {
+		n.currentEpoch = msgEpoch
+	}
+	n.mu.Unlock()
+
 	n.log.Debug("received sync event", "from", fromID, "action", payload.Action, "model", payload.Model, "id", payload.ID)
 
 	switch payload.Model {

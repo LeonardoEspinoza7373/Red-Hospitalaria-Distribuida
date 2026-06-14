@@ -277,8 +277,12 @@ func TestBullyElection_DisabledDoesNotPromoteOnTimeout(t *testing.T) {
 func TestMain(m *testing.M) {
 	config.HeartbeatInterval = 1 * time.Second
 	config.HeartbeatTimeout = 3 * time.Second
-	config.ElectionTimeout = 500 * time.Millisecond
-	config.StartupDelay = 50 * time.Millisecond
+	config.ElectionTimeoutBase = 300 * time.Millisecond
+	config.ElectionTimeoutJitter = 200 * time.Millisecond
+	config.DiscoveryTimeoutBase = 100 * time.Millisecond
+	config.DiscoveryTimeoutJitter = 100 * time.Millisecond
+	config.HeartbeatJitter = 0.1
+	config.StartupDelayMax = 50 * time.Millisecond
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})))
 

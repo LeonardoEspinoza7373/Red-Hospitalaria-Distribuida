@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime/debug"
 	"sync"
 
 	"github.com/LeonardoEspinoza7373/Red-Hospitalaria-Distribuida/internal/protocol"
@@ -62,6 +63,11 @@ func (s *Server) acceptLoop() {
 func (s *Server) handleConn(conn net.Conn) {
 	defer s.wg.Done()
 	defer conn.Close()
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("TCP_HANDLER_PANIC", "recover", r, "stack", string(debug.Stack()))
+		}
+	}()
 
 	scanner := bufio.NewScanner(conn)
 	scanner.Split(bufio.ScanLines)

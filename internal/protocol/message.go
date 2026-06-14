@@ -17,12 +17,14 @@ type LogEntry struct {
 }
 
 const (
-	Heartbeat   MessageType = "HEARTBEAT"
-	Election    MessageType = "ELECTION"
-	OK          MessageType = "OK"
-	Coordinator MessageType = "COORDINATOR"
-	LogEvent    MessageType = "LOG_EVENT"
-	SyncEvent   MessageType = "SYNC_EVENT"
+	Heartbeat        MessageType = "HEARTBEAT"
+	Election         MessageType = "ELECTION"
+	OK               MessageType = "OK"
+	Coordinator      MessageType = "COORDINATOR"
+	CoordinatorQuery MessageType = "COORDINATOR_QUERY"
+	CoordinatorAck   MessageType = "COORDINATOR_ACK"
+	LogEvent         MessageType = "LOG_EVENT"
+	SyncEvent        MessageType = "SYNC_EVENT"
 )
 
 type SyncPayload struct {
@@ -37,6 +39,8 @@ type Message struct {
 	NodeID        int          `json:"node_id"`
 	CoordinatorID int          `json:"coordinator_id,omitempty"`
 	Timestamp     int64        `json:"timestamp"`
+	Epoch         int          `json:"epoch,omitempty"`
+	ElectionID    int64        `json:"election_id,omitempty"`
 	LogData       *LogEntry    `json:"log_data,omitempty"`
 	SyncPayload   *SyncPayload `json:"sync_payload,omitempty"`
 }
