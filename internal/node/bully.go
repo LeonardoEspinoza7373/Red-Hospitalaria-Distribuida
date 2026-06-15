@@ -151,7 +151,6 @@ func (n *Node) handleCoordinatorAck(fromID, coordID, msgEpoch int) {
 	n.mu.Unlock()
 
 	n.log.Info("discovered coordinator via query", "coordinator_id", coordID, "epoch", msgEpoch, "category", "bully")
-	n.resetHeartbeatWatch()
 	n.scheduleTimeSync()
 }
 
@@ -239,7 +238,6 @@ func (n *Node) handleElectionTimeout() {
 		n.State = Follower
 		n.lastHeartbeatAt = n.Now()
 		n.mu.Unlock()
-		n.resetHeartbeatWatch()
 	} else {
 		n.log.Info("no OK received, becoming coordinator", "category", "bully")
 		n.becomeCoordinator()
@@ -369,7 +367,6 @@ func (n *Node) acceptCoordinator(coordID, msgEpoch int) {
 	if cancelling {
 		n.log.Info("cancelling election, accepting coordinator", "coordinator_id", coordID, "epoch", msgEpoch, "category", "bully")
 	}
-	n.resetHeartbeatWatch()
 	n.scheduleTimeSync()
 }
 
@@ -453,7 +450,6 @@ func (n *Node) handleHeartbeatMsg(fromID, coordID int, msgEpoch int) {
 	}
 
 	// This lower-ID coordinator is higher than our current — contest or start election
-	n.resetHeartbeatWatch()
 	if currentState == Coordinator {
 		n.log.Warn("lower-ID coordinator via heartbeat, asserting myself", "category", "bully")
 		n.mu.Lock()
@@ -465,29 +461,6 @@ func (n *Node) handleHeartbeatMsg(fromID, coordID int, msgEpoch int) {
 	} else if currentState == Follower {
 		n.log.Info("lower-ID coordinator via heartbeat, starting election", "category", "bully")
 		n.beginElection()
-	}
-}
-
-func (n *Node) handleHeartbeatWatchTimeout() {
-	n.mu.Lock()
-	if n.State != Follower {
-		n.mu.Unlock()
-		return
-	}
-	if n.Now().Sub(n.lastHeartbeatAt) < config.HeartbeatTimeout {
-		n.mu.Unlock()
-		return
-	}
-	bullyEnabled := n.BullyEnabled
-	n.CoordinatorID = 0
-	n.mu.Unlock()
-
-	n.log.Warn("heartbeat timeout — coordinator may be down", "category", "bully")
-	if bullyEnabled {
-		n.log.Info("starting election after heartbeat timeout", "category", "bully")
-		n.beginElection()
-	} else {
-		n.log.Warn("bully algorithm disabled — not starting election", "category", "bully")
 	}
 }
 

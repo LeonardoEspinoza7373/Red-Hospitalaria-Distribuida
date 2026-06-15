@@ -53,8 +53,7 @@ const (
 type EventType int
 
 const (
-	MsgReceived          EventType = iota
-	HeartbeatWatchTimeout
+	MsgReceived EventType = iota
 	ElectionResponseTimeout
 	StartupElection
 	StartupDiscovery
@@ -85,7 +84,7 @@ type Node struct {
 	gotOK               bool
 	log                 *slog.Logger
 
-	heartbeatWatchTimer *time.Timer
+	watchdogTicker      *time.Ticker
 	discoveryTimer      *time.Timer
 	electionTimer       *time.Timer
 	electionSeq         int64
@@ -144,17 +143,18 @@ func NewWithPortAndPeers(ip, port string, peers map[int]string) *Node {
 	return &Node{
 		ID:        id,
 		IP:        ip,
-		Port:      port,
-		Peers:     peers,
-		ProxyAddr: config.ProxyAddr,
-		State:     Follower,
-		ctx:       ctx,
-		cancel:    cancel,
-		events:    make(chan Event, 64),
-		log:       slog.With("node_id", id, "ip", ip),
-		logBuffer: NewLogBuffer(1000),
-		logQueue:  make(chan protocol.LogEntry, 256),
-		BullyEnabled: true,
+		Port:            port,
+		Peers:           peers,
+		ProxyAddr:       config.ProxyAddr,
+		State:           Follower,
+		ctx:             ctx,
+		cancel:          cancel,
+		events:          make(chan Event, 64),
+		log:             slog.With("node_id", id, "ip", ip),
+		logBuffer:       NewLogBuffer(1000),
+		logQueue:        make(chan protocol.LogEntry, 256),
+		BullyEnabled:    true,
+		lastHeartbeatAt: time.Now(),
 	}
 }
 
@@ -205,6 +205,7 @@ func (n *Node) Start() {
 		return
 	}
 
+	n.watchdogTicker = time.NewTicker(config.HeartbeatTimeout / 2)
 	go n.eventLoop()
 	go n.logWorker()
 	go n.scheduleStartupDiscovery()
@@ -216,8 +217,8 @@ func (n *Node) Start() {
 func (n *Node) Stop() {
 	n.log.Info("stopping node")
 	n.cancel()
-	if n.heartbeatWatchTimer != nil {
-		n.heartbeatWatchTimer.Stop()
+	if n.watchdogTicker != nil {
+		n.watchdogTicker.Stop()
 	}
 	if n.discoveryTimer != nil {
 		n.discoveryTimer.Stop()
@@ -351,10 +352,35 @@ func (n *Node) eventLoopIteration(st *time.Ticker) bool {
 		g := n.gotOK
 		n.mu.Unlock()
 		n.log.Warn("STATUS", "state", stateString(s), "coord", c, "epoch", e, "last_hb_ago", h, "gotOK", g, "category", "system")
+	case <-n.watchdogTicker.C:
+		n.checkHeartbeatWatch()
 	case evt := <-n.events:
 		n.handleEvent(evt)
 	}
 	return true
+}
+
+func (n *Node) checkHeartbeatWatch() {
+	n.mu.Lock()
+	if n.State != Follower {
+		n.mu.Unlock()
+		return
+	}
+	if n.Now().Sub(n.lastHeartbeatAt) < config.HeartbeatTimeout {
+		n.mu.Unlock()
+		return
+	}
+	bullyEnabled := n.BullyEnabled
+	n.CoordinatorID = 0
+	n.mu.Unlock()
+
+	n.log.Warn("heartbeat timeout — coordinator may be down", "category", "bully")
+	if bullyEnabled {
+		n.log.Info("starting election after heartbeat timeout", "category", "bully")
+		n.beginElection()
+	} else {
+		n.log.Warn("bully algorithm disabled — not starting election", "category", "bully")
+	}
 }
 
 func (n *Node) handleEvent(evt Event) {
@@ -363,8 +389,6 @@ func (n *Node) handleEvent(evt Event) {
 		if evt.Msg != nil {
 			n.dispatchMessage(*evt.Msg, evt.FromAddr)
 		}
-	case HeartbeatWatchTimeout:
-		n.handleHeartbeatWatchTimeout()
 	case ElectionResponseTimeout:
 		n.handleElectionTimeout()
 	case StartupElection:
