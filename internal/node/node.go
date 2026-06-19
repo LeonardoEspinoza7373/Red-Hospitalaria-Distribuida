@@ -72,7 +72,6 @@ type Node struct {
 	IP             string
 	Port           string
 	Peers          map[int]string
-	ProxyAddr      string
 	State          NodeState
 	CoordinatorID  int
 
@@ -145,7 +144,6 @@ func NewWithPortAndPeers(ip, port string, peers map[int]string) *Node {
 		IP:        ip,
 		Port:            port,
 		Peers:           peers,
-		ProxyAddr:       config.ProxyAddr,
 		State:           Follower,
 		ctx:             ctx,
 		cancel:          cancel,
@@ -448,9 +446,6 @@ func (n *Node) broadcast(msg protocol.Message) {
 	for _, addr := range n.Peers {
 		peerAddr := addr
 		go n.safeSend(peerAddr, msg)
-	}
-	if n.ProxyAddr != "" {
-		go n.safeSend(n.ProxyAddr, msg)
 	}
 }
 

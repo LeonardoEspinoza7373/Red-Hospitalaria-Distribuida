@@ -10,6 +10,8 @@ services:
     networks:
       cluster-net:
         ipv4_address: 192.168.1.13
+    ports:
+      - "8081:8080"
     volumes:
       - data_nodo1:/app/data
     restart: unless-stopped
@@ -25,6 +27,8 @@ services:
     networks:
       cluster-net:
         ipv4_address: 192.168.1.12
+    ports:
+      - "8082:8080"
     volumes:
       - data_nodo2:/app/data
     restart: unless-stopped
@@ -40,6 +44,8 @@ services:
     networks:
       cluster-net:
         ipv4_address: 192.168.1.11
+    ports:
+      - "8083:8080"
     volumes:
       - data_nodo3:/app/data
     restart: unless-stopped
@@ -55,21 +61,28 @@ services:
     networks:
       cluster-net:
         ipv4_address: 192.168.1.10
+    ports:
+      - "8084:8080"
     volumes:
       - data_nodo4:/app/data
     restart: unless-stopped
 
-  proxy:
+  nodo5:
     build:
       context: .
-      dockerfile: Dockerfile.proxy
-    container_name: proxy
-    hostname: proxy
+      dockerfile: Dockerfile.nodo
+    container_name: nodo5
+    hostname: nodo5
+    environment:
+      NODE_IP: 192.168.1.14
     networks:
       cluster-net:
         ipv4_address: 192.168.1.14
     ports:
       - "8080:8080"
+      - "8085:8080"
+    volumes:
+      - data_nodo5:/app/data
     restart: unless-stopped
 
 networks:
@@ -85,3 +98,4 @@ volumes:
   data_nodo2:
   data_nodo3:
   data_nodo4:
+  data_nodo5:

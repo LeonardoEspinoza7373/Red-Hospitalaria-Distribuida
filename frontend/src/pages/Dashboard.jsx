@@ -40,7 +40,7 @@ export function Dashboard() {
           <h2>Panel de Control</h2>
           <div className="life-pulse">
             <span className="life-pulse-dot" />
-            <span>Red: 4 nodos conectados</span>
+            <span>Red: 5 nodos conectados</span>
           </div>
         </div>
       </div>

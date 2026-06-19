@@ -61,7 +61,7 @@ func main() {
 
 	ip := resolveNodeIP()
 	if ip == "" {
-		slog.Error("no se pudo detectar una IP válida (192.168.1.10-13)")
+		slog.Error("no se pudo detectar una IP válida (192.168.1.10-14)")
 		slog.Info("asegúrate de ejecutar el contenedor en la red correcta o de definir NODE_IP")
 		os.Exit(1)
 	}
